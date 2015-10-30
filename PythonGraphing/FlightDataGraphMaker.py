@@ -37,30 +37,25 @@ def main(argv):
     files = os.listdir(folder)
 
 
+    choices = menu()
+    headers, indexes, labels, dataMatrix = [], [], [], []
+    dataMatrix.append([])  # First empty list for times
 
-    headers = []
-    choice1, choice2, choice3 = menu()
-    choice1 = options[choice1]
-    if (choice2 != 0):
-        choice2 = options[choice2]
-        if (choice3 != 0):
-            choice3 = options[choice3]
-            graphsFolder = './graphs-{0:}AND{1:}AND{2:}'.format(choice1, choice2, choice3)
+    graphsFolder = './graphs/'
+    for i in range(len(choices)):
+        dataMatrix.append([])
+        labels.append(options[choices[i]])
+        if i == 0:
+            graphsFolder = graphsFolder + labels[i]
         else:
-            choice3 = ''
-            graphsFolder = './graphs-{0:}AND{1:}'.format(choice1, choice2)
-    else:
-        choice2 = ''
-        choice3 = ''
-        graphsFolder = './graphs-{0:}'.format(choice1)
-
+            graphsFolder = graphsFolder + 'AND' + labels[i]
 
     os.system('mkdir ' + graphsFolder)
     
     firstTime = True
     for filename in files:
-        times, y1, y2, y3 = [], [], [], []
-        
+        if '.csv' not in filename:
+            continue
         flight = filename.split('.')[0]
         print 'Generating graph for: {0:}'.format(filename)
         
@@ -68,82 +63,59 @@ def main(argv):
             for x in range(9):
                 file.readline()
             if firstTime:
+                print filename
                 headers = file.readline().split(', ')
-                y1Index = headers.index(choice1)
-                if choice2 != '':
-                    y2Index = headers.index(choice2)
-                    if choice3 != '':
-                        y3Index = headers.index(choice3)
-                    else:
-                        y3Index = -1;
-                else:
-                    y2Index = -1
+                for lbl in labels:
+                    indexes.append(headers.index(lbl))
                 firstTime = False
             else:
                 file.readline()
-            if y2Index != -1:
-                if y3Index != -1:
-                    for line in file:
-                        row = line.split(', ')
-                        times.append(float(row[3])/60000)
-                        y1.append(float(row[y1Index]))
-                        y2.append(float(row[y2Index]))
-                        y3.append(float(row[y3Index]))
-                else:
-                    for line in file:
-                        row = line.split(', ')
-                        times.append(float(row[3])/60000)
-                        y1.append(float(row[y1Index]))
-                        y2.append(float(row[y2Index]))
 
-            else:
-                for line in file:
-                    row = line.split(', ')
-                    times.append(float(row[3])/60000)
-                    y1.append(float(row[y1Index]))
+            for line in file:
+                row = line.split(', ')
+                dataMatrix[0].append(float(row[3])/60000)
+                for i in range(len(indexes)):
+                    dataMatrix[i+1].append(float(row[indexes[i]]))
 
 
-        makeGraph(times, y1, y2, y3, flight, choice1, choice2, choice3, graphsFolder)
+
+        makeGraph(dataMatrix, labels, flight, graphsFolder)
     print 'Complete!!!'
 
 
-def makeGraph(times, y1, y2, y3, flightID, choice1, choice2, choice3, folder):
-    title = 'Time vs {0:}{1:}{2:} for Flight: {3:}'
+def makeGraph(data, labels, flightID, folder):
     fig, ax =  plt.subplots()
     axes = [ax]
-    if choice2 != '':
-        axes.append(axes[0].twinx())
-        if choice3 != '':
-            axes.append(axes[0].twinx())
-            fig.subplots_adjust(right=0.75)
-
-            # Move the last y-axis spine over to the right by 20% of the width of the axes
-            axes[-1].spines['right'].set_position(('axes', 1.2))
+    axes[0].set_xlabel('Time (minutes)')
     
+    title = 'Time vs {0:} for Flight: {1:}'
+    msg = labels[0]
+    for i in range(1, len(labels)):  # Loop to add y-axes (offset if necessary) & append onto title
+        axes.append(axes[0].twinx())
+        msg += ' & ' + labels[i]
+        if i > 1:
+            # Move the last y-axis spine over to the right by 10% of the width of the axes
+            axes[-1].spines['right'].set_position(('axes', 1 + (.1 * (i-1))))
+
             # To make the border of the right-most axis visible, we need to turn the frame
             # on. This hides the other plots, however, so we need to turn its fill off.
             axes[-1].set_frame_on(True)
             axes[-1].patch.set_visible(False)
+    
+    if len(labels) > 2:
+        offset = len(labels) - 2
+        # Make some space on the right side for the extra y-axis.
+        fig.subplots_adjust(right=(0.75))
 
-    
-    axes[0].plot(times, y1, 'b-')
-    axes[0].set_ylabel(choice1, color='b')
-    axes[0].set_xlabel('Time (minutes)')
-    axes[0].tick_params(axis='y', colors='b')
-    
-    if choice2 != '':
-        axes[1].plot(times, y2, 'r-')
-        axes[1].set_ylabel(choice2, color='r')
-        axes[1].tick_params(axis='y', colors='r')
-        if choice3 != '':
-            axes[2].plot(times, y3, 'g-')
-            axes[2].set_ylabel(choice3, color='g')
-            axes[2].tick_params(axis='y', colors='g')
-            plt.title(title.format(choice1, ' & ' + choice2, ' & ' + choice3, flightID))
-        else:
-            plt.title(title.format(choice1, ' & ' + choice2, '', flightID))
-    else:
-        plt.title(title.format(choice1, '', '', flightID))
+    COLORS = ('b', 'r', 'g', 'c', 'm', 'y', 'k', 'salmon', 'chartreuse', 'maroon', 'crimson')
+
+    for i, ax, lbl, color in zip(range(len(labels)), axes, labels, COLORS):
+        print 'i={0:}, lbl={1:}, color={2:}'.format(i+1, lbl, color)
+        ax.plot(data[0], data[i+1], color)
+        ax.set_ylabel(lbl, color=color)
+        ax.tick_params(axis='y', colors=color)
+
+    plt.title(title.format(msg, flightID))
 
     figure = plt.gcf()
     figure.set_size_inches(25.6, 16)
@@ -166,18 +138,23 @@ def menu():
 11. Longitude
 '''
 
-    choice1 = 0
-    choice2 = -1
-    choice3 = -1
-    while choice1 < 1 or choice1 > 11:
-        choice1 = input('Which attribute for y1? ')
-    while choice2 < 0 or choice2 > 11 or choice2 == choice1:
-        choice2 = input('(optional -- enter 0 to opt out) which attribute for y2? ')
-    if choice2 != 0:
-        while choice3 < 0 or choice3 > 11 or choice2 == choice3 or choice3 == choice1:
-            choice3 = input('(optional -- enter 0 to opt out) which attribute for y3? ')
+    choices = []
+    choice = -1
 
-    return choice1, choice2, choice3
+    while choice < 1 or choice > 11:
+        choice = input('Which attribute for y1? ')
+    choices.append(choice)
+    
+    counter = 1
+    while counter < 11:
+        choice = input('(optional -- enter 0 to opt out) which attribute for y{0:}? '.format(counter+1))
+        if (choice not in choices) and (choice < 11 and choice > 1):
+            choices.append(choice)
+            counter = counter + 1
+        elif choice == 0:
+            break
+
+    return choices
 
 
 if __name__ == "__main__":
