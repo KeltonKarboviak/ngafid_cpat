@@ -4,18 +4,74 @@ import matplotlib.pyplot as plt
 import os
 import sys
 
-options = {
-    1: 'msl_altitude',
-    2: 'indicated_airspeed',
-    3: 'vertical_airspeed',
-    4: 'heading',
-    5: 'pitch_attitude',
-    6: 'roll_attitude',
-    7: 'eng_1_rpm',
-    8: 'vertical_acceleration',
-    9: 'groundspeed',
-    10: 'latitude',
-    11: 'longitude'
+parameters = {
+    0: {'param': 'time',
+        'data' : [],
+        'index': -1,
+        'label': 'Time',
+        'units': 'minutes'},
+    1: {'param': 'msl_altitude',
+        'data' : [],
+        'index': -1,
+        'label': 'Altitude',
+        'units': 'ft'},
+    2: {'param': 'indicated_airspeed',
+        'data' : [],
+        'index': -1,
+        'label': 'Airspeed',
+        'units': 'kts'},
+    3: {'param': 'vertical_airspeed',
+        'data' : [],
+        'index': -1,
+        'label': 'Vertical Airspeed',
+        'units': 'kts'},
+    4: {'param': 'heading',
+        'data' : [],
+        'index': -1,
+        'label': 'Heading',
+        'units': 'degrees'},
+    5: {'param': 'pitch_attitude',
+        'data' : [],
+        'index': -1,
+        'label': 'Pitch Attitude',
+        'units': 'degrees'},
+    6: {'param': 'roll_attitude',
+        'data' : [],
+        'index': -1,
+        'label': 'Roll Attitude',
+        'units': 'degrees'},
+    7: {'param': 'eng_1_rpm',
+        'data' : [],
+        'index': -1,
+        'label': 'Engine RPM',
+        'units': 'rpm'},
+    8: {'param': 'vertical_acceleration',
+        'data' : [],
+        'index': -1,
+        'label': 'Vertical Acceleration',
+        'units': 'ft/s^2'},
+    9: {'param': 'groundspeed',
+        'data' : [],
+        'index': -1,
+        'label': 'Groundspeed',
+        'units': 'kts'},
+    10: {'param': 'latitude',
+        'data' : [],
+        'index': -1,
+        'label': 'Latitude',
+        'units': 'degrees'},
+    11: {'param': 'longitude',
+        'data' : [],
+        'index': -1,
+        'label': 'Longitude',
+        'units': 'degrees'}
+}
+
+exceedances = {
+    'go-around': [],
+    'touch-and-go': [],
+    'stop-and-go' : [],
+    'unstable approach': []
 }
 
 def main(argv):
@@ -33,19 +89,18 @@ def main(argv):
     files = os.listdir(folder)
 
     choices = menu()
-    headers, indexes, labels, dataMatrix = [], [], [], []
-    dataMatrix.append([])  # First empty list for times
+    headers = []
 
     graphsFolder = './graphs/'
-    for i in range(len(choices)):
-        dataMatrix.append([])
-        labels.append(options[choices[i]])
-        if i == 0:
-            graphsFolder = graphsFolder + labels[i]
+    FIRST = True
+    for c in choices:
+        if FIRST:
+            graphsFolder = graphsFolder + parameters[c]['param']
+            FIRST = False
         else:
-            graphsFolder += 'AND' + labels[i]
+            graphsFolder += 'AND' + parameters[c]['param']
 
-    os.system('mkdir graphs')         # Make graphs folder if it doesn't exist
+    os.system('mkdir graphs')          # Make graphs folder if it doesn't exist
     os.system('mkdir ' + graphsFolder) # Make folder within graphs for this query
 
     firstTime = True
@@ -55,26 +110,27 @@ def main(argv):
         print 'Generating graph for: {0:}'.format(filename)
 
         with open(folder + '/' + filename, 'r') as file:
-            clearData(dataMatrix) # Clear the dataMatrix for next file
+            clearData()        # Clear the dataMatrix for next file
+            clearExceedances() # Clear exceedance tuples
             for x in range(9):    # First 9 lines are garbage
                 file.readline()
             if firstTime:         # If this is first time, get the data headers (line 10)
                 headers = file.readline().split(', ')
-                for lbl in labels: # Find the corresponding header index for each label
-                    indexes.append(headers.index(lbl))
+                for key in parameters.keys(): # Find the corresponding header index for each label
+                    parameters[key]['index'] = headers.index( parameters[key]['param'] )
                 firstTime = False
             else:
                 file.readline()
 
             for line in file:
                 row = line.split(', ')
-                dataMatrix[0].append(float(row[3])/60000)
-                for i in range(len(indexes)):
-                    dataMatrix[i+1].append(float(row[indexes[i]]))
+                parameters[0]['data'].append( float(row[parameters[0]['index']]) / 60000 ) # Add time value
+                for key in parameters.keys(): # Add rest of param values (everything but time)
+                    if key != 0: parameters[key]['data'].append( float( row[parameters[key]['index']] ) )
 
+        analyzeData()
 
-
-        makeGraph(dataMatrix, labels, flight, graphsFolder)
+        makeGraph(choices, flight, graphsFolder)
     print 'Complete!!!'
 
 
@@ -84,21 +140,42 @@ def main(argv):
  # For example, after this function: data = [ [], [], ... ]
  # This happens by reference so data does not need to be returned.
  ##
-def clearData(data):
-    for i in range(len(data)):
-        del data[i][:]  # Deletes everything in each sub-list
+def clearData():
+    for key in parameters.keys():
+        del parameters[key]['data'][:]  # Deletes everything in each sub-list
 
 
-def makeGraph(data, labels, flightID, folder):
+def clearExceedances():
+    for key in exceedances.keys():
+        del exceedances[key][:]
+
+def analyzeData():
+    findFullStops()
+
+
+def findFullStops():
+    i = 0
+    while i < len(parameters[0]['data']):  # Loop through time values
+        if parameters[2]['data'][i] <= 10: # Check if 'indicated_airpseed' is less than or equal to 10 kts
+            start = i                      # Store starting time index
+            while i < len(parameters[0]['data']) and parameters[2]['data'][i] <= 50:
+                i += 1                     # Increment while it is less than or equal to 50 kts
+            end = i - 1                    # Store ending time index
+            exceedances['stop-and-go'].append( (start, end) )
+        else:
+            i += 1
+
+
+def makeGraph(choices, flightID, folder):
     fig, ax =  plt.subplots()
     axes = [ax]
     axes[0].set_xlabel('Time (minutes)')
 
     title = 'Time vs {0:} for Flight: {1:}'
-    msg = labels[0]
-    for i in range(1, len(labels)):  # Loop to add y-axes & append onto msg
+    msg = parameters[choices[0]]['label']
+    for i in range(1, len(choices)):  # Loop to add y-axes & append onto msg
         axes.append(axes[0].twinx())
-        msg += ' & ' + labels[i]
+        msg += ' & ' + parameters[choices[i]]['label']
         if i > 1:
             # Move the last y-axis spine over to the right by 10% of the width of the axes
             axes[-1].spines['right'].set_position(('axes', 1 + (.1 * (i-1))))
@@ -108,17 +185,21 @@ def makeGraph(data, labels, flightID, folder):
             axes[-1].set_frame_on(True)
             axes[-1].patch.set_visible(False)
 
-    if len(labels) > 2:
-        #offset = len(labels) - 2 # NOT BEING USED RIGHT NOW
+    if len(choices) > 2:
         # Make some space on the right side for the extra y-axis.
         fig.subplots_adjust(right=(0.75))
 
-    COLORS = ('b', 'r', 'g', 'c', 'm', 'y', 'k', 'salmon', 'chartreuse', 'maroon', 'crimson')
+    COLORS = ('blue', 'red', 'green', 'indigo', 'magenta', 'lightskyblue', 'black', 'salmon', 'chartreuse', 'maroon', 'crimson')
 
-    for i, ax, lbl, color in zip(range(len(labels)), axes, labels, COLORS):
-        ax.plot(data[0], data[i+1], color)
-        ax.set_ylabel(lbl, color=color)
+    for ax, c, color in zip(axes, choices, COLORS):
+        ax.plot(parameters[0]['data'], parameters[c]['data'], color)
+        ax.set_ylabel( '{0:} ({1:})'.format(parameters[c]['label'], parameters[c]['units']), color=color )
         ax.tick_params(axis='y', colors=color)
+
+    COLORS = ('cyan', 'orange', 'yellow', 'lime')
+    for key, color in zip(exceedances.keys(), COLORS):
+        for x in exceedances[key]: # Vertical Highlight for each exceedance
+            axes[0].axvspan( parameters[0]['data'][x[0]], parameters[0]['data'][x[1]], alpha=0.25, color=color )
 
     plt.title(title.format(msg, flightID))
 
