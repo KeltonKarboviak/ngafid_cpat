@@ -74,6 +74,8 @@ exceedances = {
     'unstable approach': []
 }
 
+airportData = {}
+
 def main(argv):
     if len(argv) != 1:
         print '''
@@ -87,6 +89,7 @@ def main(argv):
 
     folder = argv[0]
     files = os.listdir(folder)
+    getAirportData()
 
     choices = menu()
     headers = []
@@ -133,6 +136,27 @@ def main(argv):
         makeGraph(choices, flight, graphsFolder)
     print 'Complete!!!'
 
+###
+ # Populate a dictionary containing airport data for all airports throughout the U.S.
+ ##
+def getAirportData():
+    counter = 0
+    with open('./Airports.csv') as file:
+        lines = file.readline().split('\r')
+
+        for line in lines:
+            if counter == 0 or counter == 1:
+                counter += 1
+                continue
+            row = line.split(',')
+            airportData[counter] = { 'latitude': row[4],
+                                     'longitude': row[5],
+                                     'altitude': row[6],
+                                     'airport_code': row[0],
+                                     'airport_name': row[1],
+                                     'city': row[2],
+                                     'state': row[3] }
+            counter += 1
 
 ###
  # Function clears the contents of each sub-list in the passed in list.
@@ -162,6 +186,7 @@ def findFullStops():
                 i += 1                     # Increment while it is less than or equal to 50 kts
             end = i - 1                    # Store ending time index
             exceedances['stop-and-go'].append( (start, end) )
+            detectAirport(parameters[10]['data'][end], parameters[11]['data'][end], parameters[1]['data'][end])
         else:
             i += 1
 
@@ -207,6 +232,21 @@ def makeGraph(choices, flightID, folder):
     figure.set_size_inches(25.6, 16)
     plt.savefig(folder + '/{0:}.png'.format(flightID), dpi = 100)
     plt.clf()
+
+def detectAirport(latitude, longitude, altitude):
+    closestAirport = -1
+    closestDifference = 0
+    for key in airportData.keys():
+        airportLat = airportData[key]['latitude']
+        airportLong = airportData[key]['longitude']
+        dLat = abs(latitude - float(airportLat)) # getting difference in latitude and longitude
+        dLong = abs(longitude + float(airportLong)) # adding because the values are negative in one list and positive in another
+        totalDifference = dLat + dLong # adding the differences so we can compare and see which airport is the closest
+        if closestAirport == -1 or totalDifference < closestDifference: # if it is the first time or we found a closer airport
+            closestDifference = totalDifference
+            closestAirport = key
+
+    print "Airplane landed at: " + airportData[closestAirport]['city'] + ", " + airportData[closestAirport]['state']
 
 
 def menu():
