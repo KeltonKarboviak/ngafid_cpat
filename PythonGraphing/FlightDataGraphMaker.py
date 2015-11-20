@@ -3,6 +3,7 @@
 import matplotlib.pyplot as plt
 import os
 import sys
+import math
 
 parameters = {
     0: {'param': 'time',
@@ -149,9 +150,9 @@ def getAirportData():
                 counter += 1
                 continue
             row = line.split(',')
-            airportData[counter] = { 'latitude': row[4],
-                                     'longitude': row[5],
-                                     'altitude': row[6],
+            airportData[counter] = { 'latitude': float(row[4]),
+                                     'longitude': float(row[5]),
+                                     'altitude': float(row[6]),
                                      'airport_code': row[0],
                                      'airport_name': row[1],
                                      'city': row[2],
@@ -172,6 +173,7 @@ def clearData():
 def clearExceedances():
     for key in exceedances.keys():
         del exceedances[key][:]
+
 
 def analyzeData():
     findFullStops()
@@ -233,20 +235,40 @@ def makeGraph(choices, flightID, folder):
     plt.savefig(folder + '/{0:}.png'.format(flightID), dpi = 100)
     plt.clf()
 
+
 def detectAirport(latitude, longitude, altitude):
     closestAirport = -1
     closestDifference = 0
     for key in airportData.keys():
         airportLat = airportData[key]['latitude']
         airportLong = airportData[key]['longitude']
-        dLat = abs(latitude - float(airportLat)) # getting difference in latitude and longitude
-        dLong = abs(longitude + float(airportLong)) # adding because the values are negative in one list and positive in another
+        dLat = abs(latitude - airportLat) # getting difference in latitude and longitude
+        dLong = abs(longitude + airportLong) # adding because the values are negative in one list and positive in another
         totalDifference = dLat + dLong # adding the differences so we can compare and see which airport is the closest
         if closestAirport == -1 or totalDifference < closestDifference: # if it is the first time or we found a closer airport
             closestDifference = totalDifference
             closestAirport = key
 
     print "Airplane landed at: " + airportData[closestAirport]['city'] + ", " + airportData[closestAirport]['state']
+    print "Distance: " + calcDistance( latitude, longitude, airportData[closestAirport]['latitude'], airportData[closestAirport]['longitude'] )
+
+###
+ # http://www.movable-type.co.uk/scripts/latlong.html
+ ##
+def calcDistance(lat1, lon1, lat2, lon2):
+    print "{0} {1} {2} {3}".format(lat1, lon1, lat2, lon2)
+    R = 6371000
+    rLat1 = math.radians(lat1)
+    rLat2 = math.radians(lat2)
+    deltaLat = math.radians( lat2 - lat1 )
+    deltaLon = math.radians( lon2 - lon1 )
+
+    a = math.sin(deltaLat/2) * math.sin(deltaLat/2) + \
+        math.cos(rLat1) * math.cos(rLat2) *           \
+        math.sin(deltaLon/2) * math.sin(deltaLon/2)
+    c = 2 * math.atan2( math.sqrt(a), math.sqrt(1-a) )
+    d = R * c
+    return d
 
 
 def menu():
