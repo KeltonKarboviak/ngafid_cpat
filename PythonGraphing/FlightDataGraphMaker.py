@@ -143,20 +143,16 @@ def main(argv):
 def getAirportData():
     counter = 0
     with open('./Airports.csv') as file:
-        lines = file.readline().split('\r')
-
-        for line in lines:
-            if counter == 0 or counter == 1:
-                counter += 1
-                continue
-            row = line.split(',')
-            airportData[counter] = { 'latitude': float(row[4]),
-                                     'longitude': float(row[5]),
-                                     'altitude': float(row[6]),
-                                     'airport_code': row[0],
-                                     'airport_name': row[1],
-                                     'city': row[2],
-                                     'state': row[3] }
+        for line in file:
+            if counter > 1:
+                row = line.split(',')
+                airportData[counter] = { 'latitude' : float(row[4]),
+                                         'longitude': float(row[5]),
+                                         'altitude' : float(row[6]),
+                                         'airport_code': row[0],
+                                         'airport_name': row[1],
+                                         'city' : row[2],
+                                         'state': row[3] }
             counter += 1
 
 ###
@@ -243,14 +239,14 @@ def detectAirport(latitude, longitude, altitude):
         airportLat = airportData[key]['latitude']
         airportLong = airportData[key]['longitude']
         dLat = abs(latitude - airportLat) # getting difference in latitude and longitude
-        dLong = abs(longitude + airportLong) # adding because the values are negative in one list and positive in another
+        dLong = abs(longitude - airportLong)
         totalDifference = dLat + dLong # adding the differences so we can compare and see which airport is the closest
         if closestAirport == -1 or totalDifference < closestDifference: # if it is the first time or we found a closer airport
             closestDifference = totalDifference
             closestAirport = key
 
     print "Airplane landed at: " + airportData[closestAirport]['city'] + ", " + airportData[closestAirport]['state']
-    print "Distance: " + calcDistance( latitude, longitude, airportData[closestAirport]['latitude'], airportData[closestAirport]['longitude'] )
+    print "Distance: %d" % calcDistance( latitude, longitude, airportData[closestAirport]['latitude'], airportData[closestAirport]['longitude'] )
 
 ###
  # http://www.movable-type.co.uk/scripts/latlong.html
