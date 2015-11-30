@@ -1,8 +1,7 @@
 #!/usr/bin/python
 
 import matplotlib.pyplot as plt
-import os
-import sys
+import os, sys
 import math
 
 parameters = {
@@ -77,6 +76,13 @@ exceedances = {
 
 airportData = {}
 
+'''
+Main function gets a list of all the files contained within the passed in
+    folder name. Then scans through each file one-by-one in order to pass it
+    to the analyze data function to find exceedances.
+After the data is analyzed, it then calls makeGraph to create the graph image.
+@author: Wyatt Hedrick, Kelton Karboviak
+'''
 def main(argv):
     if len(argv) != 1:
         print '''
@@ -114,7 +120,7 @@ def main(argv):
         print 'Generating graph for: {0:}'.format(filename)
 
         with open(folder + '/' + filename, 'r') as file:
-            clearData()        # Clear the dataMatrix for next file
+            clearData()        # Clear the parameters data for next file
             clearExceedances() # Clear exceedance tuples
             for x in range(9):    # First 9 lines are garbage
                 file.readline()
@@ -130,16 +136,19 @@ def main(argv):
                 row = line.split(', ')
                 parameters[0]['data'].append( float(row[parameters[0]['index']]) / 60000 ) # Add time value
                 for key in parameters.keys(): # Add rest of param values (everything but time)
-                    if key != 0: parameters[key]['data'].append( float( row[parameters[key]['index']] ) )
+                    if key != 0:
+                        parameters[key]['data'].append( float(row[parameters[key]['index']]) )
 
         analyzeData()
 
         makeGraph(choices, flight, graphsFolder)
     print 'Complete!!!'
 
-###
- # Populate a dictionary containing airport data for all airports throughout the U.S.
- ##
+
+'''
+Populate a dictionary containing airport data for all airports throughout the U.S.
+@author: Wyatt Hedrick
+'''
 def getAirportData():
     counter = 0
     with open('./Airports.csv') as file:
@@ -155,26 +164,46 @@ def getAirportData():
                                          'state': row[3] }
             counter += 1
 
-###
- # Function clears the contents of each sub-list in the passed in list.
- # It does not delete the sub-lists themselves.
- # For example, after this function: data = [ [], [], ... ]
- # This happens by reference so data does not need to be returned.
- ##
+'''
+Function clears the contents of each sub-list in the passed in list.
+It does not delete the sub-lists themselves.
+For example, after this function: data = [ [], [], ... ]
+This happens by reference so data does not need to be returned.
+@author: Kelton Karboviak
+'''
 def clearData():
     for key in parameters.keys():
-        del parameters[key]['data'][:]  # Deletes everything in each sub-list
+        del parameters[key]['data'][:]
 
-
+'''
+Function clears the contents of the exceedances dictionary
+@author: Kelton Karboviak
+'''
 def clearExceedances():
     for key in exceedances.keys():
         del exceedances[key][:]
 
-
+'''
+This function analyzes the flight data.
+So far we have implemented a check for full stops.
+@author: Wyatt Hedrick, Kelton Karboviak
+    # TODO Implement go-around detection - Kelton
+    # TODO Implement touch-and-go detection - Wyatt
+    # TODO Implement unstable vs. stable approach detection - Kelton
+    # TODO Report each exceedance that occurred (if any) - Wyatt
+'''
 def analyzeData():
     findFullStops()
 
-
+'''
+This function finds when the airplane makes a full stop.
+It does this by scanning until the indicated airspeed is <= 10 kts.
+Then it keeps scanning until it has reached the end of the flight data,
+    or the plane has reached 50 kts (which would be a take-off).
+Once a full stop has been found, the starting and ending times are added to
+    the exceedances list for stop-and-go's as a tuple.
+@author: Wyatt Hedrick, Kelton Karboviak
+'''
 def findFullStops():
     i = 0
     while i < len(parameters[0]['data']):  # Loop through time values
@@ -183,12 +212,22 @@ def findFullStops():
             while i < len(parameters[0]['data']) and parameters[2]['data'][i] <= 50:
                 i += 1                     # Increment while it is less than or equal to 50 kts
             end = i - 1                    # Store ending time index
-            exceedances['stop-and-go'].append( (start, end) )
+            exceedances['stop-and-go'].append( (start, end) ) # Append start/end tuple to stop-and-go list
             detectAirport(parameters[10]['data'][end], parameters[11]['data'][end], parameters[1]['data'][end])
         else:
             i += 1
 
-
+'''
+This function uses the parameters chosen by the user and graphs
+    the time-series data.
+It also makes vertical highlights for the regions where exceedances were found.
+The graphs are then generated as .png files and saved to the passed in folder name
+    within the graphs/ folder.
+@param: choices the parameters to graph
+@param: flightID the ID of the flight being graphed
+@param: folder the folder name to save the .png file
+@author: Wyatt Hedrick, Kelton Karboviak
+'''
 def makeGraph(choices, flightID, folder):
     fig, ax =  plt.subplots()
     axes = [ax]
@@ -231,7 +270,19 @@ def makeGraph(choices, flightID, folder):
     plt.savefig(folder + '/{0:}.png'.format(flightID), dpi = 100)
     plt.clf()
 
-
+'''
+This function detects the airport that is closest to the passed in coordinates.
+It performs this by scanning the airportData dictionary and calculating which
+    airport as the lowest total difference between lat/lon.
+After it has scanned the dictionary, it then prints out the city, state that it is closest to.
+@param: latitude the latitude of the plane
+@param: longitude the longitude of the plane
+@param: altitude the altitude of the plane
+@author: Wyatt Hedrick
+    # TODO Check altitude between plane and airport - Wyatt
+    # TODO Have function return True/False on whether the plane is going to approach the airport
+        (i.e. going in for a landing) - Kelton
+'''
 def detectAirport(latitude, longitude, altitude):
     closestAirport = -1
     closestDifference = 0
@@ -245,13 +296,20 @@ def detectAirport(latitude, longitude, altitude):
             closestDifference = totalDifference
             closestAirport = key
 
-    print "Airplane landed at: " + airportData[closestAirport]['city'] + ", " + airportData[closestAirport]['state']
-    print "Distance: %d" % calcDistance( latitude, longitude, airportData[closestAirport]['latitude'], airportData[closestAirport]['longitude'] )
+    print "Airplane landed at: %s, %s" % (airportData[closestAirport]['city'], airportData[closestAirport]['state'])
+    print "Distance: %f" % haversine( latitude, longitude, airportData[closestAirport]['latitude'], airportData[closestAirport]['longitude'] )
 
-###
- # http://www.movable-type.co.uk/scripts/latlong.html
- ##
-def calcDistance(lat1, lon1, lat2, lon2):
+'''
+This function calculates the distance (in miles) between 2 coordinates.
+Obtained formula from: http://www.movable-type.co.uk/scripts/latlong.html
+@param: lat1 the latitude of the first point
+@param: lon1 the longitude of the first point
+@param: lat2 the latitude of the second point
+@param: lon2 the longitude of the second point
+@return: the number of miles difference between the 2 points
+@author: Wyatt Hedrick, Kelton Karboviak
+'''
+def haversine(lat1, lon1, lat2, lon2):
     print "{0} {1} {2} {3}".format(lat1, lon1, lat2, lon2)
     R = 6371000
     rLat1 = math.radians(lat1)
@@ -264,9 +322,14 @@ def calcDistance(lat1, lon1, lat2, lon2):
         math.sin(deltaLon/2) * math.sin(deltaLon/2)
     c = 2 * math.atan2( math.sqrt(a), math.sqrt(1-a) )
     d = R * c
-    return d
+    miles = d * 0.00062137
+    return miles
 
-
+'''
+This function prints out a menu to the user for them to select parameters to graph.
+@return: a list of the options (1-11) the user chose
+@author: Wyatt Hedrick, Kelton Karboviak
+'''
 def menu():
     print '''
 1. MSL Altitude
@@ -290,16 +353,19 @@ def menu():
     choices.append(choice)
 
     counter = 1
-    while counter < 11:
+    while counter < 11 and choice != 0:
         choice = input('(optional -- enter 0 to opt out) which attribute for y{0:}? '.format(counter+1))
-        if (choice not in choices) and (choice < 11 and choice > 1):
+        if (choice not in choices) and (choice > 1 and choice < 11):
             choices.append(choice)
             counter += 1
-        elif choice == 0:
-            break
 
     return choices
 
 
+'''
+This checks to see if the program is being run directly via command-line. If it is, then it calls
+    the main function passing in the command-line arguments
+    # TODO Implement a command-line flag to have the program profile this program's run-time stats
+'''
 if __name__ == "__main__":
     main(sys.argv[1:])
