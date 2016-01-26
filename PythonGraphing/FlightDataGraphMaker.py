@@ -74,7 +74,7 @@ exceedances = {
     'unstable approach': []
 }
 
-airportData = {}
+airports = []
 
 '''
 Main function gets a list of all the files contained within the passed in
@@ -139,7 +139,7 @@ def main(argv):
                     if key != 0:
                         parameters[key]['data'].append( float(row[parameters[key]['index']]) )
 
-        analyzeData()
+        #analyzeData()
 
         makeGraph(choices, flight, graphsFolder)
     print 'Complete!!!'
@@ -150,19 +150,17 @@ Populate a dictionary containing airport data for all airports throughout the U.
 @author: Wyatt Hedrick
 '''
 def getAirportData():
-    counter = 0
-    with open('./Airports.csv') as file:
+    with open('./AirportsDetailed.csv') as file:
+        file.readline()
         for line in file:
-            if counter > 1:
-                row = line.split(',')
-                airportData[counter] = { 'latitude' : float(row[4]),
-                                         'longitude': float(row[5]),
-                                         'altitude' : float(row[6]),
-                                         'airport_code': row[0],
-                                         'airport_name': row[1],
-                                         'city' : row[2],
-                                         'state': row[3] }
-            counter += 1
+            row = line.split(',')
+            # code, name, city, state, lat, lon, alt
+            a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
+            airports.append(a)
+            if len(row) >= 10:
+                # airport_code, alt, runway_code, heading, nwLat, nwLon, neLat, neLon, swLat, swLon, seLat, seLon
+                r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[16]), float(row[17]), float(row[18]), float(row[19]), float(row[20]), float(row[21]), float(row[22]), float(row[23]))
+                airports[-1].addRunway(r)
 
 '''
 Function clears the contents of each sub-list in the passed in list.
@@ -298,6 +296,13 @@ def detectAirport(latitude, longitude, altitude):
 
     print "Airplane landed at: %s, %s" % (airportData[closestAirport]['city'], airportData[closestAirport]['state'])
     print "Distance: %f" % haversine( latitude, longitude, airportData[closestAirport]['latitude'], airportData[closestAirport]['longitude'] )
+
+def distanceFromCenterLine(airplaneLat, airplaneLong, runway):
+     '''yIntercept = runwayCenterLat + tan(runwayHeading + 90) * runwayCenterLong
+     intersectionPointX = (airplaneLong - ((airplaneLat - yIntercept) * tan(runwayHeading + 90)))/(sec^2(runwayHeading + 90))
+     intersectionPointY = (-tan(runwayHeading + 90) * intersectionPointX) + yIntercept
+     return haversine(airplaneLat, airplaneLong, intersectionPointX, intersectionPointY) * 5280
+'''
 
 '''
 This function calculates the distance (in miles) between 2 coordinates.
