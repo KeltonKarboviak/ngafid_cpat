@@ -162,8 +162,9 @@ def getAirportData():
             airports[row[0]] = a # Insert into airports dict with airport_code as key
     
     with open ('./AirportsDetailed.csv', 'r') as file:
-        file.readline() # Trash line of data headers
+        print file.readline() # Trash line of data headers
         for line in file:
+            print line
             row = line.split(',')
             # airport_code, alt, runway_code, heading, centerLat, centerLon
             r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[24]), float(row[25]))
@@ -219,7 +220,9 @@ def findFullStops():
                 i += 1                     # Increment while it is less than or equal to 50 kts
             end = i - 1                    # Store ending time index
             exceedances['stop-and-go'].append( (start, end) ) # Append start/end tuple to stop-and-go list
-            detectAirport(parameters[10]['data'][end], parameters[11]['data'][end], parameters[1]['data'][end])
+            airport = detectAirport(parameters[10]['data'][start], parameters[11]['data'][start], parameters[1]['data'][start])
+            runway = detectRunway(parameters[10]['data'][start], parameters[11]['data'][start], parameters[4]['data'][start], airport)
+            print distanceFromCenterLine(parameters[10]['data'][start], parameters[11]['data'][start], runway)
         else:
             i += 1
 
@@ -304,6 +307,15 @@ def detectAirport(latitude, longitude, altitude):
 
     print "Airplane is at: %s, %s" % (airports[closestAirport].city, airports[closestAirport].state)
     print "Distance: %f" % haversine( latitude, longitude, airports[closestAirport].lat, airports[closestAirport].lon)
+    return airports[closestAirport]
+
+def detectRunway(airplaneLat, airplaneLong, airplaneHeading, airport):
+    ourRunway = None
+    for runway in airport.runways:
+        ourRunway = runway
+        print runway.runway_code
+    return ourRunway
+
 
 '''
 This function calculates the distance the airplane is from the center line in feet based on the passed in coordinates of the airplane and the runway the plane is attempting to land at.  
@@ -314,10 +326,13 @@ This function calculates the distance the airplane is from the center line in fe
 @author: Wyatt Hedrick
 '''
 def distanceFromCenterLine(airplaneLat, airplaneLong, runway):
-     yIntercept = runway.centerLat + tan(runwayHeading + 90) * runway.centerLong
-     intersectionPointX = (airplaneLong - ((airplaneLat - yIntercept) * tan(runway.heading + 90)))/(sec^2(runway.heading + 90))
-     intersectionPointY = (-tan(runway.heading + 90) * intersectionPointX) + yIntercept
-     return haversine(airplaneLat, airplaneLong, intersectionPointX, intersectionPointY) * 5280
+    if runway.heading == 0 or runway.heading == 180 or runway.heading == 360:
+        return haversine(airplaneLat, airplaneLong, airplaneLat, runway.centerLon)
+    else:
+        yIntercept = runway.centerLat + math.tan( math.radians(runway.heading + 90) ) * runway.centerLon
+        intersectionPointX = (airplaneLong - ( (airplaneLat - yIntercept) * math.tan( math.radians(runway.heading + 90) ) ))/( math.acos( math.radians(runway.heading + 90) )**2 )
+        intersectionPointY = (-math.tan( math.radians(runway.heading + 90) ) * intersectionPointX) + yIntercept
+        return haversine(airplaneLat, airplaneLong, intersectionPointX, intersectionPointY) * 5280
 
 '''
 This function calculates the distance (in miles) between 2 coordinates.
