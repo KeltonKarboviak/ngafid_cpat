@@ -3,6 +3,8 @@
 import matplotlib.pyplot as plt
 import os, sys
 import math
+from Airport import Airport
+from Runway import Runway
 
 parameters = {
     0: {'param': 'time',
@@ -150,16 +152,16 @@ Populate a dictionary containing airport data for all airports throughout the U.
 @author: Wyatt Hedrick
 '''
 def getAirportData():
-    with open('./AirportsDetailed.csv') as file:
-        file.readline()
+    with open('./AirportsDetailed.csv', 'r') as file:
+        file.readline() # Trash line of data headers
         for line in file:
             row = line.split(',')
             # code, name, city, state, lat, lon, alt
             a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
             airports.append(a)
-            if len(row) >= 10:
-                # airport_code, alt, runway_code, heading, nwLat, nwLon, neLat, neLon, swLat, swLon, seLat, seLon
-                r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[16]), float(row[17]), float(row[18]), float(row[19]), float(row[20]), float(row[21]), float(row[22]), float(row[23]))
+            if len(row) >= 10: # If airport has runway info, add it to the airport's runways list
+                # airport_code, alt, runway_code, heading, centerLat, centerLon
+                r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[24]), float(row[25]))
                 airports[-1].addRunway(r)
 
 '''
@@ -205,7 +207,7 @@ Once a full stop has been found, the starting and ending times are added to
 def findFullStops():
     i = 0
     while i < len(parameters[0]['data']):  # Loop through time values
-        if parameters[2]['data'][i] <= 10: # Check if 'indicated_airpseed' is less than or equal to 10 kts
+        if parameters[2]['data'][i] <= 10: # Check if 'indicated_airspeed' is less than or equal to 10 kts
             start = i                      # Store starting time index
             while i < len(parameters[0]['data']) and parameters[2]['data'][i] <= 50:
                 i += 1                     # Increment while it is less than or equal to 50 kts
