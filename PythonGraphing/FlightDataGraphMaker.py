@@ -76,7 +76,7 @@ exceedances = {
     'unstable approach': []
 }
 
-airports = []
+airports = {}
 
 '''
 Main function gets a list of all the files contained within the passed in
@@ -141,7 +141,7 @@ def main(argv):
                     if key != 0:
                         parameters[key]['data'].append( float(row[parameters[key]['index']]) )
 
-        #analyzeData()
+        analyzeData()
 
         makeGraph(choices, flight, graphsFolder)
     print 'Complete!!!'
@@ -152,17 +152,23 @@ Populate a dictionary containing airport data for all airports throughout the U.
 @author: Wyatt Hedrick
 '''
 def getAirportData():
-    with open('./AirportsDetailed.csv', 'r') as file:
+    with open('./Airports.csv', 'r') as file:
+        code = ''
         file.readline() # Trash line of data headers
         for line in file:
             row = line.split(',')
             # code, name, city, state, lat, lon, alt
             a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
-            airports.append(a)
-            if len(row) >= 10: # If airport has runway info, add it to the airport's runways list
-                # airport_code, alt, runway_code, heading, centerLat, centerLon
-                r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[24]), float(row[25]))
-                airports[-1].addRunway(r)
+            airports[row[0]] = a # Insert into airports dict with airport_code as key
+    
+    with open ('./AirportsDetailed.csv', 'r') as file:
+        file.readline() # Trash line of data headers
+        for line in file:
+            row = line.split(',')
+            # airport_code, alt, runway_code, heading, centerLat, centerLon
+            r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[24]), float(row[25]))
+            airports[row[2]].addRunway(r) # Add runway to corresponding airport
+
 
 '''
 Function clears the contents of each sub-list in the passed in list.
@@ -286,9 +292,9 @@ After it has scanned the dictionary, it then prints out the city, state that it 
 def detectAirport(latitude, longitude, altitude):
     closestAirport = -1
     closestDifference = 0
-    for key in airportData.keys():
-        airportLat = airportData[key]['latitude']
-        airportLong = airportData[key]['longitude']
+    for key in airports:
+        airportLat = airports[key].lat
+        airportLong = airports[key].lon
         dLat = abs(latitude - airportLat) # getting difference in latitude and longitude
         dLong = abs(longitude - airportLong)
         totalDifference = dLat + dLong # adding the differences so we can compare and see which airport is the closest
@@ -296,15 +302,22 @@ def detectAirport(latitude, longitude, altitude):
             closestDifference = totalDifference
             closestAirport = key
 
-    print "Airplane landed at: %s, %s" % (airportData[closestAirport]['city'], airportData[closestAirport]['state'])
-    print "Distance: %f" % haversine( latitude, longitude, airportData[closestAirport]['latitude'], airportData[closestAirport]['longitude'] )
+    print "Airplane is at: %s, %s" % (airports[closestAirport].city, airports[closestAirport].state)
+    print "Distance: %f" % haversine( latitude, longitude, airports[closestAirport].lat, airports[closestAirport].lon)
 
-def distanceFromCenterLine(airplaneLat, airplaneLong, runway):
-     '''yIntercept = runwayCenterLat + tan(runwayHeading + 90) * runwayCenterLong
-     intersectionPointX = (airplaneLong - ((airplaneLat - yIntercept) * tan(runwayHeading + 90)))/(sec^2(runwayHeading + 90))
-     intersectionPointY = (-tan(runwayHeading + 90) * intersectionPointX) + yIntercept
-     return haversine(airplaneLat, airplaneLong, intersectionPointX, intersectionPointY) * 5280
 '''
+This function calculates the distance the airplane is from the center line in feet based on the passed in coordinates of the airplane and the runway the plane is attempting to land at.  
+@param: airplaneLat the latitude of the airplane
+@param: airplaneLong the longitude of the airplane
+@param: runway the runway object representing the closest runway to the airplane
+@returns: the distance in feet between the airplane and the center line of the runway
+@author: Wyatt Hedrick
+'''
+def distanceFromCenterLine(airplaneLat, airplaneLong, runway):
+     yIntercept = runway.centerLat + tan(runwayHeading + 90) * runway.centerLong
+     intersectionPointX = (airplaneLong - ((airplaneLat - yIntercept) * tan(runway.heading + 90)))/(sec^2(runway.heading + 90))
+     intersectionPointY = (-tan(runway.heading + 90) * intersectionPointX) + yIntercept
+     return haversine(airplaneLat, airplaneLong, intersectionPointX, intersectionPointY) * 5280
 
 '''
 This function calculates the distance (in miles) between 2 coordinates.
