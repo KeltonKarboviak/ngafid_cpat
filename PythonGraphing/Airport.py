@@ -11,6 +11,7 @@ class Airport:
         self.lat = lat
         self.lon = lon
         self.alt = alt
+        self.runways = []
 
-    def addRunway(runway):
+    def addRunway(self, runway):
         self.runways.append(runway)

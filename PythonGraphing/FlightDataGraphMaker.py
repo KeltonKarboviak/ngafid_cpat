@@ -162,14 +162,13 @@ def getAirportData():
             airports[row[0]] = a # Insert into airports dict with airport_code as key
     
     with open ('./AirportsDetailed.csv', 'r') as file:
-        print file.readline() # Trash line of data headers
+        file.readline() # Trash line of data headers
         for line in file:
-            print line
             row = line.split(',')
             # airport_code, alt, runway_code, heading, centerLat, centerLon
             r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[24]), float(row[25]))
             airports[row[2]].addRunway(r) # Add runway to corresponding airport
-
+            print "Added runway " + r.runway_code + " to airport " + row[2]
 
 '''
 Function clears the contents of each sub-list in the passed in list.
@@ -214,7 +213,7 @@ Once a full stop has been found, the starting and ending times are added to
 def findFullStops():
     i = 0
     while i < len(parameters[0]['data']):  # Loop through time values
-        if parameters[2]['data'][i] <= 10: # Check if 'indicated_airspeed' is less than or equal to 10 kts
+        if parameters[2]['data'][i] <= 25: # Check if 'indicated_airspeed' is less than or equal to 10 kts
             start = i                      # Store starting time index
             while i < len(parameters[0]['data']) and parameters[2]['data'][i] <= 50:
                 i += 1                     # Increment while it is less than or equal to 50 kts
@@ -222,7 +221,8 @@ def findFullStops():
             exceedances['stop-and-go'].append( (start, end) ) # Append start/end tuple to stop-and-go list
             airport = detectAirport(parameters[10]['data'][start], parameters[11]['data'][start], parameters[1]['data'][start])
             runway = detectRunway(parameters[10]['data'][start], parameters[11]['data'][start], parameters[4]['data'][start], airport)
-            print distanceFromCenterLine(parameters[10]['data'][start], parameters[11]['data'][start], runway)
+            print str(distanceFromCenterLine(parameters[10]['data'][start], parameters[11]['data'][start], runway)) + " feet from center line"
+            print ""
         else:
             i += 1
 
@@ -306,14 +306,18 @@ def detectAirport(latitude, longitude, altitude):
             closestAirport = key
 
     print "Airplane is at: %s, %s" % (airports[closestAirport].city, airports[closestAirport].state)
-    print "Distance: %f" % haversine( latitude, longitude, airports[closestAirport].lat, airports[closestAirport].lon)
     return airports[closestAirport]
 
 def detectRunway(airplaneLat, airplaneLong, airplaneHeading, airport):
     ourRunway = None
+    closestDifference = -1
     for runway in airport.runways:
-        ourRunway = runway
-        print runway.runway_code
+        dLat = abs(runway.centerLat - airplaneLat) # getting difference in latitude and longitude
+        dLong = abs(runway.centerLon - airplaneLong)
+        totalDifference = dLat + dLong
+        if ourRunway == None or totalDifference < closestDifference:
+            ourRunway = runway
+    print ourRunway.runway_code
     return ourRunway
 
 
@@ -330,9 +334,9 @@ def distanceFromCenterLine(airplaneLat, airplaneLong, runway):
         return haversine(airplaneLat, airplaneLong, airplaneLat, runway.centerLon)
     else:
         yIntercept = runway.centerLat + math.tan( math.radians(runway.heading + 90) ) * runway.centerLon
-        intersectionPointX = (airplaneLong - ( (airplaneLat - yIntercept) * math.tan( math.radians(runway.heading + 90) ) ))/( math.acos( math.radians(runway.heading + 90) )**2 )
+        intersectionPointX = (airplaneLong - ( (airplaneLat - yIntercept) * math.tan( math.radians(runway.heading + 90) ) ))/( 1/math.cos( math.radians(runway.heading + 90) ) **2 )
         intersectionPointY = (-math.tan( math.radians(runway.heading + 90) ) * intersectionPointX) + yIntercept
-        return haversine(airplaneLat, airplaneLong, intersectionPointX, intersectionPointY) * 5280
+        return haversine(airplaneLat, airplaneLong, intersectionPointY, intersectionPointX) * 5280
 
 '''
 This function calculates the distance (in miles) between 2 coordinates.
@@ -345,7 +349,7 @@ Obtained formula from: http://www.movable-type.co.uk/scripts/latlong.html
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
 def haversine(lat1, lon1, lat2, lon2):
-    print "{0} {1} {2} {3}".format(lat1, lon1, lat2, lon2)
+    print "Point1: {0} {1} | Point2: {2} {3}".format(lat1, lon1, lat2, lon2)
     R = 6371000
     rLat1 = math.radians(lat1)
     rLat2 = math.radians(lat2)
