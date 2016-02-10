@@ -308,7 +308,15 @@ def detectAirport(latitude, longitude, altitude):
 
     print "Airplane is at: %s, %s" % (airports[closestAirport].city, airports[closestAirport].state)
     return airports[closestAirport]
-
+'''
+This function will detect the runway that the airplane is going to attempt to land at.
+@param: airplaneLat the latitude of the airplane
+@param: airplaneLong the longitude of the airplane
+@param: airplaneHeading the heading of the heading
+@param: airport the airport object that represents the closest airport to the airplane
+@returns: the runway object representing the runway the airplane is attempting to land on
+@author: Wyatt Hedrick, Kelton Karboviak
+'''
 def detectRunway(airplaneLat, airplaneLong, airplaneHeading, airport):
     ourRunway = None
     closestDifference = -1
@@ -318,11 +326,17 @@ def detectRunway(airplaneLat, airplaneLong, airplaneHeading, airport):
         totalDifference = dLat + dLong
         if ourRunway == None or totalDifference < closestDifference:
             ourRunway = runway
+            closestDifference = totalDifference
+    if ourRunway != None:
+        print ourRunway.runway_code
     return ourRunway
 
 
 '''
 This function calculates the distance the airplane is from the center line in feet based on the passed in coordinates of the airplane and the runway the plane is attempting to land at.  
+
+GIS Mapping Tool for verification: http://gistools.igismap.com/bearing
+
 @param: airplaneLat the latitude of the airplane
 @param: airplaneLong the longitude of the airplane
 @param: runway the runway object representing the closest runway to the airplane
@@ -333,6 +347,11 @@ def distanceFromCenterLine(airplaneLat, airplaneLong, runway):
     if runway.heading == 0 or runway.heading == 180 or runway.heading == 360:
         return haversine(airplaneLat, airplaneLong, airplaneLat, runway.centerLon)
     else:
+        rHdg = math.radians(runway.heading + 90)
+        yIntercept = runway.centerLat + math.tan(rHdg) * runway.centerLon
+        intersectionPointX = (math.tan(rHdg) * (runway.centerLat + (math.tan(rHdg) * runway.centerLon) - airplaneLat) + airplaneLong)/((math.tan(rHdg) ** 2) + 1)
+        intersectionPointY = (-math.tan(rHdg) * intersectionPointX) + yIntercept
+        return (haversine(airplaneLat, airplaneLong, intersectionPointY, intersectionPointX) * 5280)
 
 '''
 This function calculates the distance (in miles) between 2 coordinates.
@@ -346,15 +365,36 @@ Obtained formula from: http://www.movable-type.co.uk/scripts/latlong.html
 '''
 def haversine(lat1, lon1, lat2, lon2):
     print "Point1: {0} {1} | Point2: {2} {3}".format(lat1, lon1, lat2, lon2)
+    lawOfCosines(lat1, lon1, lat2, lon2)
+    R = 3959 #in miles
     rLat1 = math.radians(lat1)
     rLat2 = math.radians(lat2)
     deltaLat = math.radians( lat2 - lat1 )
     deltaLon = math.radians( lon2 - lon1 )
 
+    a = math.sin(deltaLat/2) ** 2 +                   \
         math.cos(rLat1) * math.cos(rLat2) *           \
+        math.sin(deltaLon/2) ** 2
     c = 2 * math.atan2( math.sqrt(a), math.sqrt(1-a) )
     d = R * c
+    return d # distance between the two points in miles
 
+'''
+Similarly to the haversine function, this function calculates the distance between two lat/lon points. We are currently keeping both in to find which is more accurate for our case.
+@param: lat1 the latitude of the first point
+@param: lon1 the longitude of the first point
+@param: lat2 the latitude of the second point
+@param: lon2 the longitude of the second point
+@return: the number of miles difference between the 2 points
+@author: Wyatt Hedrick, Kelton Karboviak
+'''
+def lawOfCosines(lat1, lon1, lat2, lon2):
+    R = 3959
+    rLat1 = math.radians(lat1)
+    rLat2 = math.radians(lat2)
+    dLon = math.radians(lon2 - lon1)
+    d = math.acos(math.sin(rLat1) * math.sin(rLat2) + math.cos(rLat1) * math.cos(rLat2) * math.cos(dLon)) * R
+    print "Law of cosines gives " + str(d * 5280) + " feet"
 '''
 This function prints out a menu to the user for them to select parameters to graph.
 @return: a list of the options (1-11) the user chose
