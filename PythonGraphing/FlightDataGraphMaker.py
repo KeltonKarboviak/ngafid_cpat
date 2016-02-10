@@ -221,7 +221,8 @@ def findFullStops():
             exceedances['stop-and-go'].append( (start, end) ) # Append start/end tuple to stop-and-go list
             airport = detectAirport(parameters[10]['data'][start], parameters[11]['data'][start], parameters[1]['data'][start])
             runway = detectRunway(parameters[10]['data'][start], parameters[11]['data'][start], parameters[4]['data'][start], airport)
-            print str(distanceFromCenterLine(parameters[10]['data'][start], parameters[11]['data'][start], runway)) + " feet from center line"
+            if runway != None:
+                print str(distanceFromCenterLineNew(parameters[10]['data'][start], parameters[11]['data'][start], runway)) + " feet from center line"
             print ""
         else:
             i += 1
@@ -317,7 +318,6 @@ def detectRunway(airplaneLat, airplaneLong, airplaneHeading, airport):
         totalDifference = dLat + dLong
         if ourRunway == None or totalDifference < closestDifference:
             ourRunway = runway
-    print ourRunway.runway_code
     return ourRunway
 
 
@@ -333,10 +333,6 @@ def distanceFromCenterLine(airplaneLat, airplaneLong, runway):
     if runway.heading == 0 or runway.heading == 180 or runway.heading == 360:
         return haversine(airplaneLat, airplaneLong, airplaneLat, runway.centerLon)
     else:
-        yIntercept = runway.centerLat + math.tan( math.radians(runway.heading + 90) ) * runway.centerLon
-        intersectionPointX = (airplaneLong - ( (airplaneLat - yIntercept) * math.tan( math.radians(runway.heading + 90) ) ))/( 1/math.cos( math.radians(runway.heading + 90) ) **2 )
-        intersectionPointY = (-math.tan( math.radians(runway.heading + 90) ) * intersectionPointX) + yIntercept
-        return haversine(airplaneLat, airplaneLong, intersectionPointY, intersectionPointX) * 5280
 
 '''
 This function calculates the distance (in miles) between 2 coordinates.
@@ -350,19 +346,14 @@ Obtained formula from: http://www.movable-type.co.uk/scripts/latlong.html
 '''
 def haversine(lat1, lon1, lat2, lon2):
     print "Point1: {0} {1} | Point2: {2} {3}".format(lat1, lon1, lat2, lon2)
-    R = 6371000
     rLat1 = math.radians(lat1)
     rLat2 = math.radians(lat2)
     deltaLat = math.radians( lat2 - lat1 )
     deltaLon = math.radians( lon2 - lon1 )
 
-    a = math.sin(deltaLat/2) * math.sin(deltaLat/2) + \
         math.cos(rLat1) * math.cos(rLat2) *           \
-        math.sin(deltaLon/2) * math.sin(deltaLon/2)
     c = 2 * math.atan2( math.sqrt(a), math.sqrt(1-a) )
     d = R * c
-    miles = d * 0.00062137
-    return miles
 
 '''
 This function prints out a menu to the user for them to select parameters to graph.
