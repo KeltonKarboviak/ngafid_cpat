@@ -1,10 +1,13 @@
 #!/usr/bin/python
 
-import matplotlib.pyplot as plt
-import os, sys
+#import matplotlib.pyplot as plt
 import math
+import os
+import sys
 from Airport import Airport
+from LatLon import LatLon
 from Runway import Runway
+from Vector3d import Vector3d
 
 parameters = {
     0: {'param': 'time',
@@ -143,7 +146,7 @@ def main(argv):
 
         analyzeData()
 
-        makeGraph(choices, flight, graphsFolder)
+        #makeGraph(choices, flight, graphsFolder)
     print 'Complete!!!'
 
 
@@ -153,14 +156,13 @@ Populate a dictionary containing airport data for all airports throughout the U.
 '''
 def getAirportData():
     with open('./Airports.csv', 'r') as file:
-        code = ''
         file.readline() # Trash line of data headers
         for line in file:
             row = line.split(',')
             # code, name, city, state, lat, lon, alt
             a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
             airports[row[0]] = a # Insert into airports dict with airport_code as key
-    
+
     with open ('./AirportsDetailed.csv', 'r') as file:
         file.readline() # Trash line of data headers
         for line in file:
@@ -168,7 +170,6 @@ def getAirportData():
             # airport_code, alt, runway_code, heading, centerLat, centerLon
             r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[24]), float(row[25]))
             airports[row[2]].addRunway(r) # Add runway to corresponding airport
-            print "Added runway " + r.runway_code + " to airport " + row[2]
 
 '''
 Function clears the contents of each sub-list in the passed in list.
@@ -222,7 +223,7 @@ def findFullStops():
             airport = detectAirport(parameters[10]['data'][start], parameters[11]['data'][start], parameters[1]['data'][start])
             runway = detectRunway(parameters[10]['data'][start], parameters[11]['data'][start], parameters[4]['data'][start], airport)
             if runway != None:
-                print str(distanceFromCenterLineNew(parameters[10]['data'][start], parameters[11]['data'][start], runway)) + " feet from center line"
+                print str(distanceFromCenterLine(parameters[10]['data'][start], parameters[11]['data'][start], runway)) + " feet from center line"
             print ""
         else:
             i += 1
@@ -333,7 +334,7 @@ def detectRunway(airplaneLat, airplaneLong, airplaneHeading, airport):
 
 
 '''
-This function calculates the distance the airplane is from the center line in feet based on the passed in coordinates of the airplane and the runway the plane is attempting to land at.  
+This function calculates the distance the airplane is from the center line in feet based on the passed in coordinates of the airplane and the runway the plane is attempting to land at.
 
 GIS Mapping Tool for verification: http://gistools.igismap.com/bearing
 
