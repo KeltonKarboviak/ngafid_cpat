@@ -129,12 +129,11 @@ class Vector3d:
      * Normalizes a vector to its unit vector
      * – if the vector is already unit or is zero magnitude, this is a no-op.
      *
-     * @returns {Vector3d} Normalised version of this vector.
+     * @returns {Vector3d} Normalized version of this vector.
     '''
     def unit(self):
         norm = self.length()
-        if norm == 1: return self
-        if norm == 0: return self
+        if norm == 1 or norm == 0: return self
 
         x = self.x / norm
         y = self.y / norm
