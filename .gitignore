@@ -1,3 +1,8 @@
+# NGAFID Specific Folders #
+###########################
+Good_Flight/
+graphs/
+
 # Compiled source #
 ###################
 *.com
