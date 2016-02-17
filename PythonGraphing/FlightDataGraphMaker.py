@@ -160,7 +160,7 @@ def getAirportData():
         file.readline() # Trash line of data headers
         for line in file:
             row = line.split(',')
-            # code, name, city, state, lat, lon, alt
+            #             code,   name,   city,  state,      latitude,     longitude,      altitude
             a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
             airports[row[0]] = a # Insert into airports dict with airport_code as key
 
@@ -168,8 +168,8 @@ def getAirportData():
         file.readline() # Trash line of data headers
         for line in file:
             row = line.split(',')
-            # airport_code, alt, runway_code, heading, centerLat, centerLon
-            r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[24]), float(row[25]))
+            #    airport_code,      altitude, runway_code,     magHdg,        trueHdg,      centerLat,      centerLon
+            r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[12]), float(row[25]), float(row[26]))
             airports[row[2]].addRunway(r) # Add runway to corresponding airport
 
 
@@ -358,7 +358,7 @@ def distanceFromCenterLine(airplaneLat, airplaneLon, runway):
     EARTH_RADIUS_FEET = 20900000  # Radius of the earth in feet
     airplanePoint = LatLon(airplaneLat, airplaneLon)
     runwayCenter = LatLon(runway.centerLat, runway.centerLon)
-    hdg = runway.heading
+    hdg = runway.trueHeading
 
     return airplanePoint.crossTrackDistanceTo(runwayCenter, hdg, EARTH_RADIUS_FEET)
 
