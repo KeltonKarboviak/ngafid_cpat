@@ -76,7 +76,7 @@ exceedances = {
     'go-around': [],
     'touch-and-go': [],
     'stop-and-go' : [],
-    'unstable approach': []
+    'unstable': []
 }
 
 airports = {}
@@ -204,8 +204,69 @@ So far we have implemented a check for full stops.
     # TODO Report each exceedance that occurred (if any) - Wyatt
 '''
 def analyzeData():
-    findFullStops()
-
+#findFullStops()
+    i = 0
+    while i < len(parameters[0]['data']):
+        print i
+        airplaneMSL = parameters[1]['data'][i]
+        airplaneLat = parameters[10]['data'][i]
+        airplaneLon = parameters[11]['data'][i]
+        
+        airport = detectAirport(airplaneLat, airplaneLon)
+        distance = haversine(airplaneLat, airplaneLon, airport.lat, airport.lon)
+        hAGL = airplaneMSL - airport.alt
+        
+        if (distance < 1 and hAGL < 1000):
+            print "Airplane is approaching %s, %s" % (airport.city, airport.state)
+            temp_list = []
+            start = i
+            while hAGL > 150 and hAGL < 1000:
+                print "I'M HERE!!!!!!"
+                i += 1
+                airplaneMSL = parameters[1]['data'][i]
+                hAGL = airplaneMSL - airport.alt
+            # end while
+            
+            airplaneLat = parameters[10]['data'][i]
+            airplaneLon = parameters[11]['data'][i]
+            airplaneHdg = parameters[4]['data'][i]
+            
+            runway = detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport)
+            while distance < 1 and hAGL <= 150 and hAGL >= 50:
+                print "I'm within 50-150 feet of runway!!!"
+                airplaneHdg = parameters[4]['data'][i]
+                airplaneIAS = parameters[2]['data'][i]
+                airplaneVAS = parameters[3]['data'][i]
+                
+                cond_F = abs(airplaneHdg - runway.magHeading) <= 5 and abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
+                cond_A = airplaneIAS >= 55 and airplaneIAS <= 75
+                cond_S = airplaneVAS >= -1000
+                
+                if (not cond_F or not cond_A or not cond_S):
+                    print "F=%s, A=%s, S=%s" % (cond_F, cond_A, cond_S)
+                    temp_list.append(i)
+                
+                elif (len(temp_list) > 0):
+                    exceedances['unstable'].append((temp_list[0], temp_list[-1]))
+                    temp_list = []
+                i += 1
+                
+                airplaneMSL = parameters[1]['data'][i]
+                airplaneLat = parameters[10]['data'][i]
+                airplaneLon = parameters[11]['data'][i]
+                distance = haversine(airplaneLat, airplaneLon, airport.lat, airport.lon)
+                hAGL = airplaneMSL - airport.alt
+            # end while
+            
+            end = i - 1
+            if (len(temp_list) > 0):
+                exceedances['unstable'].append((temp_list[0], temp_list[-1]))
+            # end if
+        # end if
+        
+        i += 30
+    # end while
+#analyzeLanding(end)
 
 '''
 This function finds when the airplane makes a full stop.
@@ -295,13 +356,12 @@ It performs this by scanning the airportData dictionary and calculating which
 After it has scanned the dictionary, it then prints out the city, state that it is closest to.
 @param: lat the latitude of the plane
 @param: lon the longitude of the plane
-@param: altitude the altitude of the plane
 @author: Wyatt Hedrick
     # TODO Check altitude between plane and airport - Wyatt
     # TODO Have function return True/False on whether the plane is going to approach the airport
         (i.e. going in for a landing) - Kelton
 '''
-def detectAirport(lat, lon, altitude):
+def detectAirport(lat, lon):
     closestAirport = -1
     closestDifference = 0
     for key in airports:
@@ -314,7 +374,6 @@ def detectAirport(lat, lon, altitude):
             closestDifference = totalDifference
             closestAirport = key
 
-    print "Airplane is at: %s, %s" % (airports[closestAirport].city, airports[closestAirport].state)
     return airports[closestAirport]
 
 
@@ -337,8 +396,8 @@ def detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport):
         if ourRunway is None or totalDifference < closestDifference:
             ourRunway = runway
             closestDifference = totalDifference
-    if ourRunway is not None:
-        print ourRunway.runway_code
+#    if ourRunway is not None:
+#        print ourRunway.runway_code
     return ourRunway
 
 
@@ -353,7 +412,7 @@ GIS Mapping Tool for verification: http://gistools.igismap.com/bearing
 @returns: the distance in feet between the airplane and the center line of the runway
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
-def distanceFromCenterLine(airplaneLat, airplaneLon, runway):
+def crossTrackToCenterLine(airplaneLat, airplaneLon, runway):
     print "Airplane: %f, %f -- Runway: %f, %f" % (airplaneLat, airplaneLon, runway.centerLat, runway.centerLon)
     EARTH_RADIUS_FEET = 20900000  # Radius of the earth in feet
     airplanePoint = LatLon(airplaneLat, airplaneLon)
@@ -374,8 +433,6 @@ Obtained formula from: http://www.movable-type.co.uk/scripts/latlong.html
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
 def haversine(lat1, lon1, lat2, lon2):
-    print "Point1: {0} {1} | Point2: {2} {3}".format(lat1, lon1, lat2, lon2)
-    lawOfCosines(lat1, lon1, lat2, lon2)
     R = 3959 #in miles
     rLat1 = math.radians(lat1)
     rLat2 = math.radians(lat2)
@@ -389,6 +446,25 @@ def haversine(lat1, lon1, lat2, lon2):
     d = R * c
     return d # distance between the two points in miles
 
+
+'''
+This function will analyze the time after the final approach and before the plane reaches a height of 150 feet (or until the flight ends if it is the final landing).
+@param: start the time index when the approach ends and the landing begins.
+@author: Wyatt Hedrick
+'''
+def analyzeLanding(start):
+    fullStop = False
+    while hAGL < 150:
+        if (not fullStop):
+            if airspeed <= 35:
+                fullStop = True
+            elif deltaElevation <= 5:
+                touchAndGo = True
+        i += 1
+    end = i
+
+    if fullStop: exceedances['stop-and-go'].append((start, end))
+    elif touchAndGo: exceedances['touch-and-go'].append((start, end))
 
 '''
 This function prints out a menu to the user for them to select parameters to graph.
