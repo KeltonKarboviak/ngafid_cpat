@@ -1,9 +1,9 @@
 #!/usr/bin/python
 
-#import matplotlib.pyplot as plt
 import math
 import os
 import sys
+import matplotlib.pyplot as plt
 from Airport import Airport
 from LatLon import LatLon
 from Runway import Runway
@@ -81,6 +81,7 @@ exceedances = {
 
 airports = {}
 
+
 '''
 Main function gets a list of all the files contained within the passed in
     folder name. Then scans through each file one-by-one in order to pass it
@@ -146,7 +147,7 @@ def main(argv):
 
         analyzeData()
 
-        #makeGraph(choices, flight, graphsFolder)
+        makeGraph(choices, flight, graphsFolder)
     print 'Complete!!!'
 
 
@@ -171,6 +172,7 @@ def getAirportData():
             r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[24]), float(row[25]))
             airports[row[2]].addRunway(r) # Add runway to corresponding airport
 
+
 '''
 Function clears the contents of each sub-list in the passed in list.
 It does not delete the sub-lists themselves.
@@ -182,6 +184,7 @@ def clearData():
     for key in parameters.keys():
         del parameters[key]['data'][:]
 
+
 '''
 Function clears the contents of the exceedances dictionary
 @author: Kelton Karboviak
@@ -189,6 +192,7 @@ Function clears the contents of the exceedances dictionary
 def clearExceedances():
     for key in exceedances.keys():
         del exceedances[key][:]
+
 
 '''
 This function analyzes the flight data.
@@ -202,6 +206,7 @@ So far we have implemented a check for full stops.
 def analyzeData():
     findFullStops()
 
+
 '''
 This function finds when the airplane makes a full stop.
 It does this by scanning until the indicated airspeed is <= 10 kts.
@@ -214,7 +219,7 @@ Once a full stop has been found, the starting and ending times are added to
 def findFullStops():
     i = 0
     while i < len(parameters[0]['data']):  # Loop through time values
-        if parameters[2]['data'][i] <= 25: # Check if 'indicated_airspeed' is less than or equal to 10 kts
+        if parameters[2]['data'][i] <= 25: # Check if 'indicated_airspeed' is less than or equal to 25 kts
             start = i                      # Store starting time index
             while i < len(parameters[0]['data']) and parameters[2]['data'][i] <= 50:
                 i += 1                     # Increment while it is less than or equal to 50 kts
@@ -222,11 +227,12 @@ def findFullStops():
             exceedances['stop-and-go'].append( (start, end) ) # Append start/end tuple to stop-and-go list
             airport = detectAirport(parameters[10]['data'][start], parameters[11]['data'][start], parameters[1]['data'][start])
             runway = detectRunway(parameters[10]['data'][start], parameters[11]['data'][start], parameters[4]['data'][start], airport)
-            if runway != None:
+            if runway is not None:
                 print str(distanceFromCenterLine(parameters[10]['data'][start], parameters[11]['data'][start], runway)) + " feet from center line"
             print ""
         else:
             i += 1
+
 
 '''
 This function uses the parameters chosen by the user and graphs
@@ -281,54 +287,57 @@ def makeGraph(choices, flightID, folder):
     plt.savefig(folder + '/{0:}.png'.format(flightID), dpi = 100)
     plt.clf()
 
+
 '''
 This function detects the airport that is closest to the passed in coordinates.
 It performs this by scanning the airportData dictionary and calculating which
     airport as the lowest total difference between lat/lon.
 After it has scanned the dictionary, it then prints out the city, state that it is closest to.
-@param: latitude the latitude of the plane
-@param: longitude the longitude of the plane
+@param: lat the latitude of the plane
+@param: lon the longitude of the plane
 @param: altitude the altitude of the plane
 @author: Wyatt Hedrick
     # TODO Check altitude between plane and airport - Wyatt
     # TODO Have function return True/False on whether the plane is going to approach the airport
         (i.e. going in for a landing) - Kelton
 '''
-def detectAirport(latitude, longitude, altitude):
+def detectAirport(lat, lon, altitude):
     closestAirport = -1
     closestDifference = 0
     for key in airports:
         airportLat = airports[key].lat
-        airportLong = airports[key].lon
-        dLat = abs(latitude - airportLat) # getting difference in latitude and longitude
-        dLong = abs(longitude - airportLong)
-        totalDifference = dLat + dLong # adding the differences so we can compare and see which airport is the closest
+        airportLon = airports[key].lon
+        dLat = abs(lat - airportLat) # getting difference in lat and lon
+        dLon = abs(lon - airportLon)
+        totalDifference = dLat + dLon # adding the differences so we can compare and see which airport is the closest
         if closestAirport == -1 or totalDifference < closestDifference: # if it is the first time or we found a closer airport
             closestDifference = totalDifference
             closestAirport = key
 
     print "Airplane is at: %s, %s" % (airports[closestAirport].city, airports[closestAirport].state)
     return airports[closestAirport]
+
+
 '''
 This function will detect the runway that the airplane is going to attempt to land at.
 @param: airplaneLat the latitude of the airplane
-@param: airplaneLong the longitude of the airplane
-@param: airplaneHeading the heading of the heading
+@param: airplaneLon the longitude of the airplane
+@param: airplaneHdg the heading of the heading
 @param: airport the airport object that represents the closest airport to the airplane
 @returns: the runway object representing the runway the airplane is attempting to land on
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
-def detectRunway(airplaneLat, airplaneLong, airplaneHeading, airport):
+def detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport):
     ourRunway = None
     closestDifference = -1
     for runway in airport.runways:
-        dLat = abs(runway.centerLat - airplaneLat) # getting difference in latitude and longitude
-        dLong = abs(runway.centerLon - airplaneLong)
-        totalDifference = dLat + dLong
-        if ourRunway == None or totalDifference < closestDifference:
+        dLat = abs(runway.centerLat - airplaneLat) # getting difference in lat and lon
+        dLon = abs(runway.centerLon - airplaneLon)
+        totalDifference = dLat + dLon
+        if ourRunway is None or totalDifference < closestDifference:
             ourRunway = runway
             closestDifference = totalDifference
-    if ourRunway != None:
+    if ourRunway is not None:
         print ourRunway.runway_code
     return ourRunway
 
@@ -339,20 +348,20 @@ This function calculates the distance the airplane is from the center line in fe
 GIS Mapping Tool for verification: http://gistools.igismap.com/bearing
 
 @param: airplaneLat the latitude of the airplane
-@param: airplaneLong the longitude of the airplane
+@param: airplaneLon the longitude of the airplane
 @param: runway the runway object representing the closest runway to the airplane
 @returns: the distance in feet between the airplane and the center line of the runway
-@author: Wyatt Hedrick
+@author: Wyatt Hedrick, Kelton Karboviak
 '''
-def distanceFromCenterLine(airplaneLat, airplaneLong, runway):
-    if runway.heading == 0 or runway.heading == 180 or runway.heading == 360:
-        return haversine(airplaneLat, airplaneLong, airplaneLat, runway.centerLon)
-    else:
-        rHdg = math.radians(runway.heading + 90)
-        yIntercept = runway.centerLat + math.tan(rHdg) * runway.centerLon
-        intersectionPointX = (math.tan(rHdg) * (runway.centerLat + (math.tan(rHdg) * runway.centerLon) - airplaneLat) + airplaneLong)/((math.tan(rHdg) ** 2) + 1)
-        intersectionPointY = (-math.tan(rHdg) * intersectionPointX) + yIntercept
-        return (haversine(airplaneLat, airplaneLong, intersectionPointY, intersectionPointX) * 5280)
+def distanceFromCenterLine(airplaneLat, airplaneLon, runway):
+    print "Airplane: %f, %f -- Runway: %f, %f" % (airplaneLat, airplaneLon, runway.centerLat, runway.centerLon)
+    EARTH_RADIUS_FEET = 20900000  # Radius of the earth in feet
+    airplanePoint = LatLon(airplaneLat, airplaneLon)
+    runwayCenter = LatLon(runway.centerLat, runway.centerLon)
+    hdg = runway.heading
+
+    return airplanePoint.crossTrackDistanceTo(runwayCenter, hdg, EARTH_RADIUS_FEET)
+
 
 '''
 This function calculates the distance (in miles) between 2 coordinates.
@@ -380,22 +389,7 @@ def haversine(lat1, lon1, lat2, lon2):
     d = R * c
     return d # distance between the two points in miles
 
-'''
-Similarly to the haversine function, this function calculates the distance between two lat/lon points. We are currently keeping both in to find which is more accurate for our case.
-@param: lat1 the latitude of the first point
-@param: lon1 the longitude of the first point
-@param: lat2 the latitude of the second point
-@param: lon2 the longitude of the second point
-@return: the number of miles difference between the 2 points
-@author: Wyatt Hedrick, Kelton Karboviak
-'''
-def lawOfCosines(lat1, lon1, lat2, lon2):
-    R = 3959
-    rLat1 = math.radians(lat1)
-    rLat2 = math.radians(lat2)
-    dLon = math.radians(lon2 - lon1)
-    d = math.acos(math.sin(rLat1) * math.sin(rLat2) + math.cos(rLat1) * math.cos(rLat2) * math.cos(dLon)) * R
-    print "Law of cosines gives " + str(d * 5280) + " feet"
+
 '''
 This function prints out a menu to the user for them to select parameters to graph.
 @return: a list of the options (1-11) the user chose
