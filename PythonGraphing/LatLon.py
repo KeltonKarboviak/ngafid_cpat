@@ -79,7 +79,7 @@ class LatLon:
         theta = math.radians(bearing)
 
         x =  math.sin(rLon) * math.cos(theta) - math.sin(rLat) * math.cos(rLon) * math.sin(theta)
-        y = -math.cos(rLon) * math.cos(theta) - math.sin(rLat) * math.sin(rLon) + math.sin(theta)
+        y = -math.cos(rLon) * math.cos(theta) - math.sin(rLat) * math.sin(rLon) * math.sin(theta)
         z =  math.cos(rLat) * math.sin(theta)
 
         return Vector3d(x, y, z)
@@ -98,7 +98,7 @@ class LatLon:
      *   var d = p1.distanceTo(p2); // 404.3 km
     '''
     def distanceTo(self, point, radius=None):
-        radius = 6371000 if radius == None else radius
+        radius = 6371000 if radius is None else radius
 
         p1 = self.toVector()
         p2 = point.toVector()
@@ -169,7 +169,7 @@ class LatLon:
      *   var p2 = p1.destinationPoint(7794, 300.7); // 51.5135°N, 000.0983°W
     '''
     def destinationPoint(self, distance, bearing, radius=None):
-        radius = 6371000 if radius == None else radius
+        radius = 6371000 if radius is None else radius
 
         delta = distance / radius # angular distance in radians
 
@@ -204,15 +204,16 @@ class LatLon:
      *   var d = pCurrent.crossTrackDistanceTo(p1, p2);  // -307.5 m
     '''
     def crossTrackDistanceTo(self, pathStart, pathBrngEnd, radius=None):
-        radius = 6371000 if radius == None else radius
+        radius = 6371000 if radius is None else radius
 
         p = self.toVector()
 
-        # great circle defined by two points
-        #gc = pathStart.toVector().cross(pathBrngEnd.toVector())
-
-        # great circle defined by point + bearing
-        gc = pathStart.greatCircle(pathBrngEnd)
+        if isinstance(pathBrngEnd, LatLon):
+            # great circle defined by two points
+            gc = pathStart.toVector().cross(pathBrngEnd.toVector())
+        else:
+            # great circle defined by point + bearing
+            gc = pathStart.greatCircle(pathBrngEnd)
 
         alpha = gc.angleTo(p, p.cross(gc)) # (signed) angle between point & great circle normal vector
         alpha = -math.pi / 2 - alpha if alpha < 0 else math.pi / 2 - alpha # (signed) angle between point & great circle
@@ -229,10 +230,10 @@ class LatLon:
      * @returns {string} LatLon represented as (lat, lon).
     '''
     def toString(self, precision=None):
-        p = 5 if precision == None else precision
+        p = 5 if precision is None else precision
         str = '(%.{0}f, %{0}f)'.format(p)
         return str % (self.lat, self.lon)
-
+# End LatLon class
 
 
 '''
