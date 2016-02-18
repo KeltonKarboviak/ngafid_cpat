@@ -73,9 +73,9 @@ parameters = {
 }
 
 exceedances = {
-    'go-around': [],
-    'touch-and-go': [],
     'stop-and-go' : [],
+    'touch-and-go': [],
+    'go-around': [],
     'unstable': []
 }
 
@@ -145,9 +145,11 @@ def main(argv):
                     if key != 0:
                         parameters[key]['data'].append( float(row[parameters[key]['index']]) )
 
-        analyzeData()
+        start = findInitialTakeOff()
+        analyzeData(start)
 
         makeGraph(choices, flight, graphsFolder)
+        print "--------------------------------------------"
     print 'Complete!!!'
 
 
@@ -193,55 +195,77 @@ def clearExceedances():
     for key in exceedances.keys():
         del exceedances[key][:]
 
+'''
+This function will find the initial takeoff and return the first time value after the initial takeoff
+@return the first time index after the initial takeoff
+'''
+def findInitialTakeOff():
+    i = 0
+    airplaneMSL = parameters[1]['data'][i]
+    airplaneLat = parameters[10]['data'][i]
+    airplaneLon = parameters[11]['data'][i]
+    airport = detectAirport(airplaneLat, airplaneLon)
+    hAGL = airplaneMSL - airport.alt
+    while hAGL < 500 and i < len(parameters[0]['data']):
+        airplaneMSL = parameters[1]['data'][i]
+        hAGL = airplaneMSL - airport.alt
+        i += 1
+    return i
+
 
 '''
 This function analyzes the flight data.
 So far we have implemented a check for full stops.
+@param startingIndex the time index after the initial takeoff
 @author: Wyatt Hedrick, Kelton Karboviak
     # TODO Implement go-around detection - Kelton
     # TODO Implement touch-and-go detection - Wyatt
     # TODO Implement unstable vs. stable approach detection - Kelton
     # TODO Report each exceedance that occurred (if any) - Wyatt
 '''
-def analyzeData():
-#findFullStops()
-    i = 0
+def analyzeData(startingIndex):
+    i = startingIndex
     while i < len(parameters[0]['data']):
-        print i
         airplaneMSL = parameters[1]['data'][i]
         airplaneLat = parameters[10]['data'][i]
         airplaneLon = parameters[11]['data'][i]
-        
+
         airport = detectAirport(airplaneLat, airplaneLon)
         distance = haversine(airplaneLat, airplaneLon, airport.lat, airport.lon)
         hAGL = airplaneMSL - airport.alt
-        
-        if (distance < 1 and hAGL < 1000):
+
+        if (distance < 1 and hAGL < 500):
+            #isGoAround = True
             print "Airplane is approaching %s, %s" % (airport.city, airport.state)
             temp_list = []
-            start = i
-            while hAGL > 150 and hAGL < 1000:
+            while hAGL > 150 and hAGL < 500:
                 i += 1
                 airplaneMSL = parameters[1]['data'][i]
                 hAGL = airplaneMSL - airport.alt
             # end while
-            
+
+            start = i
+
             airplaneLat = parameters[10]['data'][i]
             airplaneLon = parameters[11]['data'][i]
             airplaneHdg = parameters[4]['data'][i]
-            
+
             runway = detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport)
+
             while distance < 1 and hAGL <= 150 and hAGL >= 50:
-                print "I'm within 50-150 feet of runway!!!"
+                #isGoAround = False
                 airplaneHdg = parameters[4]['data'][i]
                 airplaneIAS = parameters[2]['data'][i]
                 airplaneVAS = parameters[3]['data'][i]
-                
-                cond_F = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 5 and abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
+
+                if runway is not None:
+                    cond_F = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 5 and abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
+                else:
+                    cond_F = True
                 cond_A = airplaneIAS >= 55 and airplaneIAS <= 75
                 cond_S = airplaneVAS >= -1000
-                
-                if (not cond_F or not cond_A or not cond_S):
+
+                if not cond_F or not cond_A or not cond_S:
                     print "F=%s, A=%s, S=%s" % (cond_F, cond_A, cond_S)
                     if not cond_F:
                         print "Runway Heading: %s\nAirplane Heading: %s\nCrossTrackToCenterLine: %s" % (runway.magHeading, airplaneHdg, crossTrackToCenterLine(airplaneLat, airplaneLon, runway))
@@ -250,53 +274,32 @@ def analyzeData():
                     if not cond_S:
                         print "Vertical Airspeed: %s ft/min" % (airplaneVAS)
                     temp_list.append(i)
-                
-                elif (len(temp_list) > 0):
+
+                elif len(temp_list) > 0:
                     exceedances['unstable'].append((temp_list[0], temp_list[-1]))
-                    temp_list = []
+                    del temp_list[:]
                 i += 1
-                
+
                 airplaneMSL = parameters[1]['data'][i]
                 airplaneLat = parameters[10]['data'][i]
                 airplaneLon = parameters[11]['data'][i]
                 distance = haversine(airplaneLat, airplaneLon, airport.lat, airport.lon)
                 hAGL = airplaneMSL - airport.alt
             # end while
-            
-            end = i - 1
-            if (len(temp_list) > 0):
+
+            if start == i: end = start
+            else: end = i - 1
+
+            #if isGoAround: exceedances['go-around'].append((start, end))
+            #else:
+            if len(temp_list) > 0:
                 exceedances['unstable'].append((temp_list[0], temp_list[-1]))
             # end if
             i = analyzeLanding(end, airport)
         # end if
-        
-        i += 30
+
+        i += 15
     # end while
-'''
-This function finds when the airplane makes a full stop.
-It does this by scanning until the indicated airspeed is <= 10 kts.
-Then it keeps scanning until it has reached the end of the flight data,
-    or the plane has reached 50 kts (which would be a take-off).
-Once a full stop has been found, the starting and ending times are added to
-    the exceedances list for stop-and-go's as a tuple.
-@author: Wyatt Hedrick, Kelton Karboviak
-'''
-def findFullStops():
-    i = 0
-    while i < len(parameters[0]['data']):  # Loop through time values
-        if parameters[2]['data'][i] <= 25: # Check if 'indicated_airspeed' is less than or equal to 25 kts
-            start = i                      # Store starting time index
-            while i < len(parameters[0]['data']) and parameters[2]['data'][i] <= 50:
-                i += 1                     # Increment while it is less than or equal to 50 kts
-            end = i - 1                    # Store ending time index
-            exceedances['stop-and-go'].append( (start, end) ) # Append start/end tuple to stop-and-go list
-            airport = detectAirport(parameters[10]['data'][start], parameters[11]['data'][start], parameters[1]['data'][start])
-            runway = detectRunway(parameters[10]['data'][start], parameters[11]['data'][start], parameters[4]['data'][start], airport)
-            if runway is not None:
-                print str(distanceFromCenterLine(parameters[10]['data'][start], parameters[11]['data'][start], runway)) + " feet from center line"
-            print ""
-        else:
-            i += 1
 
 
 '''
@@ -340,10 +343,11 @@ def makeGraph(choices, flightID, folder):
         ax.set_ylabel( '{0:} ({1:})'.format(parameters[c]['label'], parameters[c]['units']), color=color )
         ax.tick_params(axis='y', colors=color)
 
-    COLORS = ('cyan', 'orange', 'yellow', 'lime')
+    COLORS = ('cyan', 'orange', 'red', 'lime')
     for key, color in zip(exceedances.keys(), COLORS):
+        print key + ": " + str(exceedances[key])
         for x in exceedances[key]: # Vertical Highlight for each exceedance
-            axes[0].axvspan( parameters[0]['data'][x[0]], parameters[0]['data'][x[1]], alpha=0.25, color=color )
+            axes[0].axvspan( parameters[0]['data'][x[0]], parameters[0]['data'][x[1]], alpha=0.8, color=color )
 
     plt.title(title.format(msg, flightID))
 
@@ -393,14 +397,15 @@ def detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport):
     ourRunway = None
     closestDifference = -1
     for runway in airport.runways:
-        dLat = abs(runway.centerLat - airplaneLat) # getting difference in lat and lon
-        dLon = abs(runway.centerLon - airplaneLon)
-        totalDifference = dLat + dLon
-        if ourRunway is None or totalDifference < closestDifference:
-            ourRunway = runway
-            closestDifference = totalDifference
-#    if ourRunway is not None:
-#        print ourRunway.runway_code
+        if 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 20:
+            dLat = abs(runway.centerLat - airplaneLat) # getting difference in lat and lon
+            dLon = abs(runway.centerLon - airplaneLon)
+            totalDifference = dLat + dLon
+            if ourRunway is None or totalDifference < closestDifference:
+                ourRunway = runway
+                closestDifference = totalDifference
+        #   if ourRunway is not None:
+        #      print ourRunway.runway_code
     return ourRunway
 
 
@@ -462,9 +467,9 @@ def analyzeLanding(start, airport):
     fullStop = False
     elevations = []
     deltaElevation = 6
-    
+
     fullStop = touchAndGo = False
-    
+
     while hAGL < 500 and i < len(parameters[0]['data']) - 1:
         airplaneIAS = parameters[2]['data'][i]
         if (not fullStop):
@@ -490,7 +495,9 @@ def analyzeLanding(start, airport):
         exceedances['touch-and-go'].append((start, end))
         print "Touch and Go!!!!"
     else:
+        exceedances['go-around'].append((start, end))
         print "Go Around?!?!?!"
+    print ""
     return end
 '''
 This function prints out a menu to the user for them to select parameters to graph.
