@@ -221,7 +221,6 @@ def analyzeData():
             temp_list = []
             start = i
             while hAGL > 150 and hAGL < 1000:
-                print "I'M HERE!!!!!!"
                 i += 1
                 airplaneMSL = parameters[1]['data'][i]
                 hAGL = airplaneMSL - airport.alt
@@ -238,12 +237,18 @@ def analyzeData():
                 airplaneIAS = parameters[2]['data'][i]
                 airplaneVAS = parameters[3]['data'][i]
                 
-                cond_F = abs(airplaneHdg - runway.magHeading) <= 5 and abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
+                cond_F = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 5 and abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
                 cond_A = airplaneIAS >= 55 and airplaneIAS <= 75
                 cond_S = airplaneVAS >= -1000
                 
                 if (not cond_F or not cond_A or not cond_S):
                     print "F=%s, A=%s, S=%s" % (cond_F, cond_A, cond_S)
+                    if not cond_F:
+                        print "Runway Heading: %s\nAirplane Heading: %s\nCrossTrackToCenterLine: %s" % (runway.magHeading, airplaneHdg, crossTrackToCenterLine(airplaneLat, airplaneLon, runway))
+                    if not cond_A:
+                        print "Indicated Airspeed: %s knots" % (airplaneIAS)
+                    if not cond_S:
+                        print "Vertical Airspeed: %s ft/min" % (airplaneVAS)
                     temp_list.append(i)
                 
                 elif (len(temp_list) > 0):
@@ -262,12 +267,11 @@ def analyzeData():
             if (len(temp_list) > 0):
                 exceedances['unstable'].append((temp_list[0], temp_list[-1]))
             # end if
+            i = analyzeLanding(end, airport)
         # end if
         
         i += 30
     # end while
-#analyzeLanding(end)
-
 '''
 This function finds when the airplane makes a full stop.
 It does this by scanning until the indicated airspeed is <= 10 kts.
@@ -353,7 +357,6 @@ def makeGraph(choices, flightID, folder):
 This function detects the airport that is closest to the passed in coordinates.
 It performs this by scanning the airportData dictionary and calculating which
     airport as the lowest total difference between lat/lon.
-After it has scanned the dictionary, it then prints out the city, state that it is closest to.
 @param: lat the latitude of the plane
 @param: lon the longitude of the plane
 @author: Wyatt Hedrick
@@ -452,20 +455,43 @@ This function will analyze the time after the final approach and before the plan
 @param: start the time index when the approach ends and the landing begins.
 @author: Wyatt Hedrick
 '''
-def analyzeLanding(start):
+def analyzeLanding(start, airport):
+    i = start
+    airplaneMSL = parameters[1]['data'][i]
+    hAGL = airplaneMSL - airport.alt
     fullStop = False
-    while hAGL < 150:
+    elevations = []
+    deltaElevation = 6
+    
+    fullStop = touchAndGo = False
+    
+    while hAGL < 500 and i < len(parameters[0]['data']) - 1:
+        airplaneIAS = parameters[2]['data'][i]
         if (not fullStop):
-            if airspeed <= 35:
+            if airplaneIAS <= 35:
                 fullStop = True
             elif deltaElevation <= 5:
                 touchAndGo = True
         i += 1
+        airplaneMSL = parameters[1]['data'][i]
+        hAGL = airplaneMSL - airport.alt
+        if len(elevations) < 5:
+            elevations.append(hAGL)
+        else:
+            elevations.pop(0)
+            elevations.append(hAGL)
+            deltaElevation = sum(elevations)/len(elevations)
     end = i
 
-    if fullStop: exceedances['stop-and-go'].append((start, end))
-    elif touchAndGo: exceedances['touch-and-go'].append((start, end))
-
+    if fullStop:
+        exceedances['stop-and-go'].append((start, end))
+        print "Full Stop!!!!"
+    elif touchAndGo:
+        exceedances['touch-and-go'].append((start, end))
+        print "Touch and Go!!!!"
+    else:
+        print "Go Around?!?!?!"
+    return end
 '''
 This function prints out a menu to the user for them to select parameters to graph.
 @return: a list of the options (1-11) the user chose
