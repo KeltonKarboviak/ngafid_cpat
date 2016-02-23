@@ -3,6 +3,7 @@
 import math
 import os
 import sys
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from Airport import Airport
 from LatLon import LatLon
@@ -142,7 +143,7 @@ def main(argv):
         analyzeData(start)
 
         makeGraph(choices, flight, graphsFolder)
-        print "--------------------------------------------"
+        print "--------------------------------------------\n"
     print 'Complete!!!'
 
 
@@ -337,13 +338,17 @@ def makeGraph(choices, flightID, folder):
         ax.set_ylabel( '%s (%s)' % (parameters[c]['label'], parameters[c]['units']), color=color )
         ax.tick_params(axis='y', colors=color)
 
+    patches = []
     COLORS = ('cyan', 'orange', 'red', 'lime')
     for key, color in zip(exceedances.keys(), COLORS):
+        patches.append( mpatches.Patch(color=color, label=key) )
         print key + ": " + str(exceedances[key])
         for x in exceedances[key]: # Vertical Highlight for each exceedance
             axes[0].axvspan( parameters[0]['data'][x[0]], parameters[0]['data'][x[1]], alpha=0.8, color=color )
 
     plt.title(title % (msg, flightID))
+
+    plt.figlegend(handles=patches, labels=exceedances.keys(), loc='center right')
 
     figure = plt.gcf()
     figure.set_size_inches(25.6, 16)
