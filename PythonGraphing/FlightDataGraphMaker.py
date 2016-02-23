@@ -107,14 +107,7 @@ def main(argv):
     choices = menu()
     headers = []
 
-    graphsFolder = './graphs/'
-    FIRST = True
-    for c in choices:
-        if FIRST:
-            graphsFolder = graphsFolder + parameters[c]['param']
-            FIRST = False
-        else:
-            graphsFolder += 'AND' + parameters[c]['param']
+    graphsFolder = './graphs/' + 'AND'.join([parameters[c]['param'] for c in choices])
 
     os.system('mkdir graphs')          # Make graphs folder if it doesn't exist
     os.system('mkdir ' + graphsFolder) # Make folder within graphs for this query
@@ -123,7 +116,7 @@ def main(argv):
     for filename in files:
         if '.csv' not in filename: continue # Skip file if it isn't a .csv
         flight = filename.split('.')[0]
-        print 'Generating graph for: {0:}'.format(filename)
+        print 'Generating graph for: %s' % filename
 
         with open(folder + '/' + filename, 'r') as file:
             clearData()        # Clear the parameters data for next file
@@ -268,11 +261,13 @@ def analyzeData(startingIndex):
                 if not cond_F or not cond_A or not cond_S:
                     print "F=%s, A=%s, S=%s" % (cond_F, cond_A, cond_S)
                     if not cond_F:
-                        print "Runway Heading: %s\nAirplane Heading: %s\nCrossTrackToCenterLine: %s" % (runway.magHeading, airplaneHdg, crossTrackToCenterLine(airplaneLat, airplaneLon, runway))
+                        print "\tRunway Heading: %s" % runway.magHeading
+                        print "\tAirplane Heading: %s" % airplaneHdg
+                        print "\tCrossTrackToCenterLine: %s" % crossTrackToCenterLine(airplaneLat, airplaneLon, runway)
                     if not cond_A:
-                        print "Indicated Airspeed: %s knots" % (airplaneIAS)
+                        print "\tIndicated Airspeed: %s knots" % (airplaneIAS)
                     if not cond_S:
-                        print "Vertical Airspeed: %s ft/min" % (airplaneVAS)
+                        print "\tVertical Airspeed: %s ft/min" % (airplaneVAS)
                     temp_list.append(i)
 
                 elif len(temp_list) > 0:
@@ -287,8 +282,7 @@ def analyzeData(startingIndex):
                 hAGL = airplaneMSL - airport.alt
             # end while
 
-            if start == i: end = start
-            else: end = i - 1
+            end = start if start == i else i - 1
 
             #if isGoAround: exceedances['go-around'].append((start, end))
             #else:
@@ -318,7 +312,7 @@ def makeGraph(choices, flightID, folder):
     axes = [ax]
     axes[0].set_xlabel('Time (minutes)')
 
-    title = 'Time vs {0:} for Flight: {1:}'
+    title = 'Time vs %s for Flight: %s'
     msg = parameters[choices[0]]['label']
     for i in range(1, len(choices)):  # Loop to add y-axes & append onto msg
         axes.append(axes[0].twinx())
@@ -340,7 +334,7 @@ def makeGraph(choices, flightID, folder):
 
     for ax, c, color in zip(axes, choices, COLORS):
         ax.plot(parameters[0]['data'], parameters[c]['data'], color)
-        ax.set_ylabel( '{0:} ({1:})'.format(parameters[c]['label'], parameters[c]['units']), color=color )
+        ax.set_ylabel( '%s (%s)' % (parameters[c]['label'], parameters[c]['units']), color=color )
         ax.tick_params(axis='y', colors=color)
 
     COLORS = ('cyan', 'orange', 'red', 'lime')
@@ -349,11 +343,11 @@ def makeGraph(choices, flightID, folder):
         for x in exceedances[key]: # Vertical Highlight for each exceedance
             axes[0].axvspan( parameters[0]['data'][x[0]], parameters[0]['data'][x[1]], alpha=0.8, color=color )
 
-    plt.title(title.format(msg, flightID))
+    plt.title(title % (msg, flightID))
 
     figure = plt.gcf()
     figure.set_size_inches(25.6, 16)
-    plt.savefig(folder + '/{0:}.png'.format(flightID), dpi = 100)
+    plt.savefig('%s/%s.png' % (folder, flightID), dpi = 100)
     plt.clf()
 
 
@@ -404,8 +398,7 @@ def detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport):
             if ourRunway is None or totalDifference < closestDifference:
                 ourRunway = runway
                 closestDifference = totalDifference
-        #   if ourRunway is not None:
-        #      print ourRunway.runway_code
+
     return ourRunway
 
 
@@ -421,7 +414,6 @@ GIS Mapping Tool for verification: http://gistools.igismap.com/bearing
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
 def crossTrackToCenterLine(airplaneLat, airplaneLon, runway):
-    print "Airplane: %f, %f -- Runway: %f, %f" % (airplaneLat, airplaneLon, runway.centerLat, runway.centerLon)
     EARTH_RADIUS_FEET = 20900000  # Radius of the earth in feet
     airplanePoint = LatLon(airplaneLat, airplaneLon)
     runwayCenter = LatLon(runway.centerLat, runway.centerLon)
@@ -437,11 +429,13 @@ Obtained formula from: http://www.movable-type.co.uk/scripts/latlong.html
 @param: lon1 the longitude of the first point
 @param: lat2 the latitude of the second point
 @param: lon2 the longitude of the second point
-@return: the number of miles difference between the 2 points
+@param: radius (Mean) radius of earth (defaults to radius in miles)
+@return: the distance between the 2 points, in same units as radius
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
-def haversine(lat1, lon1, lat2, lon2):
-    R = 3959 #in miles
+def haversine(lat1, lon1, lat2, lon2, radius=None):
+    radius = 3959 if radius is None else radius
+
     rLat1 = math.radians(lat1)
     rLat2 = math.radians(lat2)
     deltaLat = math.radians( lat2 - lat1 )
@@ -451,7 +445,7 @@ def haversine(lat1, lon1, lat2, lon2):
         math.cos(rLat1) * math.cos(rLat2) *           \
         math.sin(deltaLon/2) ** 2
     c = 2 * math.atan2( math.sqrt(a), math.sqrt(1-a) )
-    d = R * c
+    d = radius * c
     return d # distance between the two points in miles
 
 
@@ -528,7 +522,7 @@ def menu():
 
     counter = 1
     while counter < 11 and choice != 0:
-        choice = input('(optional -- enter 0 to opt out) which attribute for y{0:}? '.format(counter+1))
+        choice = input('(optional -- enter 0 to opt out) which attribute for y%d? ' % (counter+1))
         if (choice not in choices) and (choice > 1 and choice < 11):
             choices.append(choice)
             counter += 1

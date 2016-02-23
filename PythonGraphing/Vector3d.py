@@ -23,14 +23,14 @@ import math
  *
  * @module vector3d
 '''
-class Vector3d:
+class Vector3d(object):
     x, y, z = 0.0, 0.0, 0.0
 
     '''
      * Creates a 3-d vector.
      *
-     * The vector may be normalised, or use x/y/z values for eg height relative to the sphere or
-     * ellipsoid, distance from earth centre, etc.
+     * The vector may be normalized, or use x/y/z values for eg height relative to the sphere or
+     * ellipsoid, distance from earth center, etc.
      *
      * @constructor
      * @param {number} x - X component of vector.
@@ -154,7 +154,7 @@ class Vector3d:
         sinTheta = self.cross(v).length()
         cosTheta = self.dot(v)
 
-        if vSign != None:
+        if vSign is not None:
             # use vSign as reference to get sign of sinTheta
             sinTheta = -sinTheta if self.cross(v).dot(vSign) < 0 else sinTheta
 
@@ -168,6 +168,6 @@ class Vector3d:
      * @returns {string} Vector represented as [x,y,z].
     '''
     def toString(self, precision=None):
-        p = 5 if precision == None else precision
-        str = '<%.{0}f, %{0}f, %{0}f>'.format(p)
+        p = 5 if precision is None else precision
+        str = '<%.{0}f, %.{0}f, %.{0}f>'.format(p)
         return str % (self.x, self.y, self.z)
