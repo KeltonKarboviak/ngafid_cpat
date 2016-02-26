@@ -140,7 +140,7 @@ def main(argv):
                         parameters[key]['data'].append( float(row[parameters[key]['index']]) )
 
         start = findInitialTakeOff()
-        analyzeData(start)
+        analyzeApproach(start)
 
         makeGraph(choices, flight, graphsFolder)
         print "--------------------------------------------\n"
@@ -212,12 +212,8 @@ This function analyzes the flight data.
 So far we have implemented a check for full stops.
 @param startingIndex the time index after the initial takeoff
 @author: Wyatt Hedrick, Kelton Karboviak
-    # TODO Implement go-around detection - Kelton
-    # TODO Implement touch-and-go detection - Wyatt
-    # TODO Implement unstable vs. stable approach detection - Kelton
-    # TODO Report each exceedance that occurred (if any) - Wyatt
 '''
-def analyzeData(startingIndex):
+def analyzeApproach(startingIndex):
     i = startingIndex
     while i < len(parameters[0]['data']):
         airplaneMSL = parameters[1]['data'][i]
@@ -253,7 +249,8 @@ def analyzeData(startingIndex):
                 airplaneVAS = parameters[3]['data'][i]
 
                 if runway is not None:
-                    cond_F = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 5 and abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
+                    cond_F = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 5 and \
+                            abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
                 else:
                     cond_F = True
                 cond_A = airplaneIAS >= 55 and airplaneIAS <= 75
@@ -285,8 +282,6 @@ def analyzeData(startingIndex):
 
             end = start if start == i else i - 1
 
-            #if isGoAround: exceedances['go-around'].append((start, end))
-            #else:
             if len(temp_list) > 0:
                 exceedances['unstable'].append((temp_list[0], temp_list[-1]))
             # end if
@@ -457,6 +452,7 @@ def haversine(lat1, lon1, lat2, lon2, radius=None):
 '''
 This function will analyze the time after the final approach and before the plane reaches a height of 150 feet (or until the flight ends if it is the final landing).
 @param: start the time index when the approach ends and the landing begins.
+@param: airport the airport that the airplane is attempting to land at
 @author: Wyatt Hedrick
 '''
 def analyzeLanding(start, airport):
