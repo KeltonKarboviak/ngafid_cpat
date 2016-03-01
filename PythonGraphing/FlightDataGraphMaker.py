@@ -72,21 +72,26 @@ parameters = {
         'label': 'Longitude',
         'units': 'degrees'}
 }
+'''
+approaches = {
+    id:{
+    'landing-start',
+    'landing-end',
+    'landing-type',
+    'unstable-slices': [],
+    'reason-code'
+    }
 
-exceedances = {
-    'stop-and-go' : [],
-    'touch-and-go': [],
-    'go-around': [],
-    'unstable': []
 }
-
+'''
 airports = {}
-
+approaches = {}
+approachID = 0
 
 '''
 Main function gets a list of all the files contained within the passed in
     folder name. Then scans through each file one-by-one in order to pass it
-    to the analyze data function to find exceedances.
+    to the analyze data function to find approaches and landings.
 After the data is analyzed, it then calls makeGraph to create the graph image.
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
@@ -121,7 +126,7 @@ def main(argv):
 
         with open(folder + '/' + filename, 'r') as file:
             clearData()        # Clear the parameters data for next file
-            clearExceedances() # Clear exceedance tuples
+            clearApproaches() # Clear exceedance tuples
             for x in range(9):    # First 9 lines are garbage
                 file.readline()
             if firstTime:         # If this is first time, get the data headers (line 10)
@@ -143,6 +148,7 @@ def main(argv):
         analyzeApproach(start)
 
         makeGraph(choices, flight, graphsFolder)
+        resetApproachID()
         print "--------------------------------------------\n"
     print 'Complete!!!'
 
@@ -182,12 +188,12 @@ def clearData():
 
 
 '''
-Function clears the contents of the exceedances dictionary
+Function clears the contents of the approaches dictionary
 @author: Kelton Karboviak
 '''
-def clearExceedances():
-    for key in exceedances.keys():
-        del exceedances[key][:]
+def clearApproaches():
+    for key in approaches.keys():
+        del approaches[key]
 
 '''
 This function will find the initial takeoff and return the first time value after the initial takeoff
@@ -206,6 +212,24 @@ def findInitialTakeOff():
         i += 1
     return i
 
+'''
+This function will reset the approachID to 0 on the start of a new flight.
+@author Wyatt Hedrick, Kelton Karboviak
+'''
+def resetApproachID():
+    global approachID
+    approachID = 0
+
+'''
+This function will return a unique approachID for each approach in the flight.
+@returns aID the unique approachID associated with the approach.
+@author Wyatt Hedrick, Kelton Karboviak
+'''
+def getApproachID():
+    global approachID
+    aID = approachID
+    approachID += 1
+    return aID
 
 '''
 This function analyzes the flight data.
@@ -227,6 +251,9 @@ def analyzeApproach(startingIndex):
         if (distance < 1 and hAGL < 500):
             #isGoAround = True
             print "Airplane is approaching %s, %s" % (airport.city, airport.state)
+            thisApproachID = getApproachID()
+            approaches[thisApproachID] = {}
+            approaches[thisApproachID]['unstable'] = []
             temp_list = []
             while hAGL > 150 and hAGL < 500:
                 i += 1
@@ -241,7 +268,7 @@ def analyzeApproach(startingIndex):
             airplaneHdg = parameters[4]['data'][i]
 
             runway = detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport)
-
+            unstableReason = [False, False, False] # F, A, S
             while distance < 1 and hAGL <= 150 and hAGL >= 50:
                 #isGoAround = False
                 airplaneHdg = parameters[4]['data'][i]
@@ -255,21 +282,24 @@ def analyzeApproach(startingIndex):
                     cond_F = True
                 cond_A = airplaneIAS >= 55 and airplaneIAS <= 75
                 cond_S = airplaneVAS >= -1000
-
                 if not cond_F or not cond_A or not cond_S:
                     print "F=%s, A=%s, S=%s" % (cond_F, cond_A, cond_S)
                     if not cond_F:
                         print "\tRunway Heading: %s" % runway.magHeading
                         print "\tAirplane Heading: %s" % airplaneHdg
                         print "\tCrossTrackToCenterLine: %s" % crossTrackToCenterLine(airplaneLat, airplaneLon, runway)
+                        unstableReason[0] = True
                     if not cond_A:
                         print "\tIndicated Airspeed: %s knots" % (airplaneIAS)
+                        unstableReason[1] = True
                     if not cond_S:
                         print "\tVertical Airspeed: %s ft/min" % (airplaneVAS)
+                        unstableReason[2] = True
                     temp_list.append(i)
 
                 elif len(temp_list) > 0:
-                    exceedances['unstable'].append((temp_list[0], temp_list[-1]))
+                    approaches[thisApproachID]['unstable'].append((temp_list[0], temp_list[-1]))
+                    approaches[thisApproachID]
                     del temp_list[:]
                 i += 1
 
@@ -283,9 +313,17 @@ def analyzeApproach(startingIndex):
             end = start if start == i else i - 1
 
             if len(temp_list) > 0:
-                exceedances['unstable'].append((temp_list[0], temp_list[-1]))
+                approaches[thisApproachID]['unstable'].append((temp_list[0], temp_list[-1]))
             # end if
-            i = analyzeLanding(end, airport)
+            reason = ""
+            if unstableReason[0]:
+                reason += "F"
+            if unstableReason[1]:
+                reason += "A"
+            if unstableReason[2]:
+                reason += "S"
+            approaches[thisApproachID]['reason-code'] = reason
+            i = analyzeLanding(end, airport, thisApproachID)
         # end if
 
         i += 15
@@ -295,7 +333,7 @@ def analyzeApproach(startingIndex):
 '''
 This function uses the parameters chosen by the user and graphs
     the time-series data.
-It also makes vertical highlights for the regions where exceedances were found.
+It also makes vertical highlights for the regions where unstable approaches and landings were found.
 The graphs are then generated as .png files and saved to the passed in folder name
     within the graphs/ folder.
 @param: choices the parameters to graph
@@ -334,16 +372,27 @@ def makeGraph(choices, flightID, folder):
         ax.tick_params(axis='y', colors=color)
 
     patches = []
-    COLORS = ('cyan', 'orange', 'red', 'lime')
-    for key, color in zip(exceedances.keys(), COLORS):
-        patches.append( mpatches.Patch(color=color, label=key) )
-        print key + ": " + str(exceedances[key])
-        for x in exceedances[key]: # Vertical Highlight for each exceedance
-            axes[0].axvspan( parameters[0]['data'][x[0]], parameters[0]['data'][x[1]], alpha=0.8, color=color )
+    types = ('Stop and Go', 'Touch and Go', 'Go Around', 'Unstable Approach')
+    COLORS = ('lime', 'cyan', 'orange', 'red')
+
+    for landingType, color in zip(types, COLORS):
+        patches.append(mpatches.Patch(color=color, label = landingType))
+    for key, a in approaches.items():
+        for x in a['unstable']:
+            axes[0].axvspan( parameters[0]['data'][x[0]], parameters[0]['data'][x[1]], alpha = 0.8, color='red')
+        if (a['landing-type'] == 'stop-and-go'):
+            landingColor = 'lime'
+        elif (a['landing-type'] == 'touch-and-go'):
+            landingColor = 'cyan'
+        else:
+            landingColor = 'orange'
+        print str(a['landing-start']) + " ----- " + str(a['landing-end'])
+        axes[0].axvspan( parameters[0]['data'][a['landing-start']], parameters[0]['data'][a['landing-end']], alpha = 0.8, color = landingColor)
+
 
     plt.title(title % (msg, flightID))
 
-    plt.figlegend(handles=patches, labels=exceedances.keys(), loc='center right')
+    plt.figlegend(handles=patches, labels=types, loc='center right')
 
     figure = plt.gcf()
     figure.set_size_inches(25.6, 16)
@@ -455,7 +504,7 @@ This function will analyze the time after the final approach and before the plan
 @param: airport the airport that the airplane is attempting to land at
 @author: Wyatt Hedrick
 '''
-def analyzeLanding(start, airport):
+def analyzeLanding(start, airport, thisApproachID):
     i = start
     airplaneMSL = parameters[1]['data'][i]
     hAGL = airplaneMSL - airport.alt
@@ -484,14 +533,16 @@ def analyzeLanding(start, airport):
     end = i
 
     if fullStop:
-        exceedances['stop-and-go'].append((start, end))
+        approaches[thisApproachID]['landing-type'] = 'stop-and-go'
         print "Full Stop!!!!"
     elif touchAndGo:
-        exceedances['touch-and-go'].append((start, end))
+        approaches[thisApproachID]['landing-type'] = 'touch-and-go'
         print "Touch and Go!!!!"
     else:
-        exceedances['go-around'].append((start, end))
+        approaches[thisApproachID]['landing-type'] = 'go-around'
         print "Go Around?!?!?!"
+    approaches[thisApproachID]['landing-start'] = start
+    approaches[thisApproachID]['landing-end'] = end
     print ""
     return end
 '''
