@@ -72,18 +72,8 @@ parameters = {
         'label': 'Longitude',
         'units': 'degrees'}
 }
-'''
-approaches = {
-    id:{
-    'landing-start',
-    'landing-end',
-    'landing-type',
-    'unstable-slices': [],
-    'reason-code'
-    }
 
-}
-'''
+
 airports = {}
 approaches = {}
 approachID = 0
@@ -128,7 +118,7 @@ def main(argv):
 
         with open(folder + '/' + filename, 'r') as file:
             clearData()        # Clear the parameters data for next file
-            clearApproaches() # Clear exceedance tuples
+            clearApproaches()  # Clear approaches dict
             for x in range(9):    # First 9 lines are garbage
                 file.readline()
             if firstTime:         # If this is first time, get the data headers (line 10)
@@ -158,25 +148,25 @@ def main(argv):
     
 '''
 Outputs the approach analysis information to a .csv file. The file will be saved to
-    ./results/flightID.csv
+    ./results/flightID_results.csv
 @author: Kelton Karboviak
 '''
 def outputToCSV(flightID, folder):
-    with open('%s/%s.csv' % (folder, flightID), 'w') as output:
-        output.write(flightID + '\n')
-        for ID in approaches:
+    with open('%s/%s_results.csv' % (folder, flightID), 'w') as output:
+        output.write('Approach_ID,Landing_Start,Landing_End,Landing_Type,Unstable?,Reason_Code\n')
+        for ID, approach in approaches.items():
             output.write('%d,%d,%d,%s,%s,%s\n' %           \
                          (ID,                              \
-                          approaches[ID]['landing-start'], \
-                          approaches[ID]['landing-end'],   \
-                          approaches[ID]['landing-type'],  \
-                          'Y' if len(approaches[ID]['unstable']) else 'N', \
-                          approaches[ID]['reason-code'])   \
+                          approach['landing-start'], \
+                          approach['landing-end'],   \
+                          approach['landing-type'],  \
+                          'Y' if len(approach['unstable']) > 0 else 'N', \
+                          '-' if approach['reason-code'] == "" else approach['reason-code'])  \
             )
         # end for
     # end with
 
-
+                         
 '''
 Populate a dictionary containing airport data for all airports throughout the U.S.
 @author: Wyatt Hedrick
@@ -323,7 +313,6 @@ def analyzeApproach(startingIndex):
 
                 elif len(temp_list) > 0:
                     approaches[thisApproachID]['unstable'].append((temp_list[0], temp_list[-1]))
-                    approaches[thisApproachID]
                     del temp_list[:]
                 i += 1
 
@@ -410,7 +399,6 @@ def makeGraph(choices, flightID, folder):
             landingColor = 'cyan'
         else:
             landingColor = 'orange'
-        print str(a['landing-start']) + " ----- " + str(a['landing-end'])
         axes[0].axvspan( parameters[0]['data'][a['landing-start']], parameters[0]['data'][a['landing-end']], alpha = 0.8, color = landingColor)
 
 
