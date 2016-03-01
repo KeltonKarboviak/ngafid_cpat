@@ -109,9 +109,11 @@ def main(argv):
     headers = []
 
     graphsFolder = './graphs/' + 'AND'.join([parameters[c]['param'] for c in choices])
+    resultsFolder = './results'
 
     os.system('mkdir graphs')          # Make graphs folder if it doesn't exist
     os.system('mkdir ' + graphsFolder) # Make folder within graphs for this query
+    os.system('mkdir results')         # Make results folder if it doesn't exist
 
     firstTime = True
     for filename in files:
@@ -143,8 +145,30 @@ def main(argv):
         analyzeApproach(start)
 
         makeGraph(choices, flight, graphsFolder)
+        outputToCSV(flight, resultsFolder)
         print "--------------------------------------------\n"
     print 'Complete!!!'
+    
+    
+'''
+Outputs the approach analysis information to a .csv file. The file will be saved to
+    ./results/flightID.csv
+@author: Kelton Karboviak
+'''
+def outputToCSV(flightID, folder):
+    with open('%s/%s.csv' % (folder, flightID), 'w') as output:
+        output.write(flightID + '\n')
+        for ID in approaches:
+            output.write('%d,%d,%d,%s,%s,%s\n' %           \
+                         (ID,                              \
+                          approaches[ID]['landing-start'], \
+                          approaches[ID]['landing-end'],   \
+                          approaches[ID]['landing-type'],  \
+                          'Y' if len(approaches[ID]['unstable']) else 'N', \
+                          approaches[ID]['reason-code'])   \
+            )
+        # end for
+    # end with
 
 
 '''
