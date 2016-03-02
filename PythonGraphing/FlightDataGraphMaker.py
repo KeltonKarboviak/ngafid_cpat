@@ -290,7 +290,7 @@ def analyzeApproach(startingIndex):
                 airplaneVAS = parameters[3]['data'][i]
 
                 if runway is not None:
-                    cond_F = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 5 and \
+                    cond_F = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 10 and \
                             abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
                 else:
                     cond_F = True
