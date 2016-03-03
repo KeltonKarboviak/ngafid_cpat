@@ -1,11 +1,11 @@
 class Runway:
-    airport_code, runway_code = '', ''
+    airportCode, runwayCode = '', ''
     alt, magHeading, trueHeading, centerLat, centerLon = 0.0, 0.0, 0.0, 0.0, 0.0
 
-    def __init__(self, airport_code, alt, runway_code, magHdg, trueHdg, centerLat, centerLon):
-        self.airport_code = airport_code
+    def __init__(self, airportCode, alt, runwayCode, magHdg, trueHdg, centerLat, centerLon):
+        self.airportCode = airportCode
         self.alt = alt
-        self.runway_code = runway_code
+        self.runwayCode = runwayCode
         self.magHeading = magHdg
         self.trueHeading = trueHdg
         self.centerLat = centerLat

@@ -16,13 +16,13 @@ from Vector3d import Vector3d
  * a vector-based approach makes many calculations much simpler, and easier to follow, compared
  * with trigonometric equivalents).
  *
- * Note on a spherical model earth, an n-vector is equivalent to a normalised version of an (ECEF)
+ * Note on a spherical model earth, an n-vector is equivalent to a normalized version of an (ECEF)
  * cartesian coordinate.
  *
  * @module   latlon-vectors
  * @requires vector3d
 '''
-class LatLon:
+class LatLon(object):
     lat, lon = 0.0, 0.0
 
 
@@ -44,7 +44,7 @@ class LatLon:
     '''
      * Converts ‘this’ lat/lon point to Vector3d n-vector (normal to earth's surface).
      *
-     * @returns {Vector3d} Normalised n-vector representing lat/lon point.
+     * @returns {Vector3d} Normalized n-vector representing lat/lon point.
      *
      * @example
      *   var p = new LatLon(45, 45);
@@ -67,7 +67,7 @@ class LatLon:
      * Direction of vector is such that initial bearing vector b = c × p.
      *
      * @param   {number}   bearing - Compass bearing in degrees.
-     * @returns {Vector3d} Normalised vector representing great circle.
+     * @returns {Vector3d} Normalized vector representing great circle.
      *
      * @example
      *   var p1 = new LatLon(53.3206, -1.7297);
@@ -89,7 +89,7 @@ class LatLon:
      * Returns the distance from ‘this’ point to the specified point.
      *
      * @param   {LatLon} point - Latitude/longitude of destination point.
-     * @param   {number} [radius=6371e3] - (Mean) radius of earth (defaults to radius in metres).
+     * @param   {number} [radius=6371e3] - (Mean) radius of earth (defaults to radius in meters).
      * @returns {number} Distance between this point and destination point, in same units as radius.
      *
      * @example
@@ -159,9 +159,9 @@ class LatLon:
      * Returns the destination point from ‘this’ point having travelled the given distance on the
      * given initial bearing (bearing will normally vary before destination is reached).
      *
-     * @param   {number} distance - Distance travelled, in same units as earth radius (default: metres).
+     * @param   {number} distance - Distance travelled, in same units as earth radius (default: meters).
      * @param   {number} bearing - Initial bearing in degrees from north.
-     * @param   {number} [radius=6371e3] - (Mean) radius of earth (defaults to radius in metres).
+     * @param   {number} [radius=6371e3] - (Mean) radius of earth (defaults to radius in meters).
      * @returns {LatLon} Destination point.
      *
      * @example
@@ -191,7 +191,7 @@ class LatLon:
      *
      * @param   {LatLon}        pathStart - Start point of great circle path.
      * @param   {LatLon|number} pathBrngEnd - End point of great circle path or initial bearing from great circle start point.
-     * @param   {number}        [radius=6371e3] - (Mean) radius of earth (defaults to radius in metres).
+     * @param   {number}        [radius=6371e3] - (Mean) radius of earth (defaults to radius in meters).
      * @returns {number}        Distance to great circle (-ve if to left, +ve if to right of path).
      *
      * @example
@@ -231,7 +231,7 @@ class LatLon:
     '''
     def toString(self, precision=None):
         p = 5 if precision is None else precision
-        str = '(%.{0}f, %{0}f)'.format(p)
+        str = '(%.{0}f, %.{0}f)'.format(p)
         return str % (self.lat, self.lon)
 # End LatLon class
 
@@ -250,4 +250,5 @@ def toLatLonS(self):
     rLon = math.atan2(self.y, self.x)
     return LatLon(math.degrees(rLat), math.degrees(rLon))
 
+# Assign toLatLonS function prototype to Vector3d class
 Vector3d.toLatLonS = toLatLonS
