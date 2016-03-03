@@ -3,6 +3,8 @@
 import math
 import os
 import sys
+import time
+import datetime
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from Airport import Airport
@@ -103,6 +105,7 @@ def main(argv):
     choices = menu()
     headers = []
 
+    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y_%m_%d_%H-%M-%S')
     graphsFolder = './graphs/' + 'AND'.join([parameters[c]['param'] for c in choices])
     resultsFolder = './results'
 
@@ -112,7 +115,10 @@ def main(argv):
 
     firstTime = True
     for filename in files:
-        if '.csv' not in filename: continue # Skip file if it isn't a .csv
+        if '.csv' not in filename:
+            continue # Skip file if it isn't a .csv
+        elif os.path.isfile('%s/results_%s' % (resultsFolder, filename)):
+            continue # Skip file if it's results have already been calculated
         flight = filename.split('.')[0]
         print 'Generating graph for: %s' % filename
 
@@ -140,7 +146,7 @@ def main(argv):
         analyzeApproach(start)
 
         makeGraph(choices, flight, graphsFolder)
-        outputToCSV(flight, resultsFolder)
+        outputToCSV(flight, timestamp, resultsFolder)
         resetApproachID()
         print "--------------------------------------------\n"
     print 'Complete!!!'
@@ -148,22 +154,37 @@ def main(argv):
     
 '''
 Outputs the approach analysis information to a .csv file. The file will be saved to
-    ./results/flightID_results.csv
+    ./results/results_flightID.csv, and appended to ./results/query_timestamp.csv
+@param flightID string of the current flight ID to write to a CSV file
+@param timestamp string of the timestamp when the program started running.
+    This will be used as the filename to store the results of all flights for this program run
+@param folder string of the folder in which to store the result CSV file
 @author: Kelton Karboviak
 '''
-def outputToCSV(flightID, folder):
-    with open('%s/%s_results.csv' % (folder, flightID), 'w') as output:
-        output.write('Approach_ID,Landing_Start,Landing_End,Landing_Type,Unstable?,Reason_Code\n')
-        for ID, approach in approaches.items():
-            output.write('%d,%d,%d,%s,%s,%s\n' %           \
-                         (ID,                              \
-                          approach['landing-start'], \
-                          approach['landing-end'],   \
-                          approach['landing-type'],  \
-                          'Y' if len(approach['unstable']) > 0 else 'N', \
-                          '-' if approach['reason-code'] == "" else approach['reason-code'])  \
-            )
-        # end for
+def outputToCSV(flightID, timestamp, folder):
+    with open('%s/query_%s.csv' % (folder, timestamp), 'a') as globalOutput:
+        with open('%s/results_%s.csv' % (folder, flightID), 'w') as output:
+            header = 'Flight_ID,Approach_ID,Airport_ID,Landing_Start,Landing_End,Landing_Type,Unstable?,F1_Heading,F2_CT,A_IAS,S_VAS\n'
+            if os.stat(globalOutput.name).st_size == 0:
+                globalOutput.write(header)
+            output.write(header)
+            for ID, approach in approaches.items():
+                lineToWrite = '%s,%d,%s,%d,%d,%s,%s,%s,%s,%s,%s\n' % \
+                              (flightID,
+                               ID,
+                               approach['airport-code'],
+                               approach['landing-start'],
+                               approach['landing-end'],
+                               approach['landing-type'],
+                               'Y' if len(approach['unstable']) > 0 else 'N',
+                               "-" if len(approach['F1']) == 0 else sum(approach['F1'])/len(approach['F1']),
+                               "-" if len(approach['F2']) == 0 else sum(approach['F2'])/len(approach['F2']),
+                               "-" if len(approach['A'])  == 0 else sum(approach['A'])/len(approach['A']),
+                               "-" if len(approach['S'])  == 0 else sum(approach['S'])/len(approach['S']))
+                globalOutput.write(lineToWrite)
+                output.write(lineToWrite)
+            # end for
+        # end with
     # end with
 
                          
@@ -178,13 +199,13 @@ def getAirportData():
             row = line.split(',')
             #             code,   name,   city,  state,      latitude,     longitude,      altitude
             a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
-            airports[row[0]] = a # Insert into airports dict with airport_code as key
+            airports[row[0]] = a # Insert into airports dict with airportCode as key
 
     with open ('./AirportsDetailed.csv', 'r') as file:
         file.readline() # Trash line of data headers
         for line in file:
             row = line.split(',')
-            #    airport_code,      altitude, runway_code,     magHdg,        trueHdg,      centerLat,      centerLon
+            #     airportCode,      altitude, runwayCode,      magHdg,        trueHdg,      centerLat,      centerLon
             r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[12]), float(row[25]), float(row[26]))
             airports[row[2]].addRunway(r) # Add runway to corresponding airport
 
@@ -263,7 +284,6 @@ def analyzeApproach(startingIndex):
         hAGL = airplaneMSL - airport.alt
 
         if (distance < 1 and hAGL < 500):
-            #isGoAround = True
             print "Airplane is approaching %s, %s" % (airport.city, airport.state)
             thisApproachID = getApproachID()
             approaches[thisApproachID] = {}
@@ -282,37 +302,37 @@ def analyzeApproach(startingIndex):
             airplaneHdg = parameters[4]['data'][i]
 
             runway = detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport)
-            unstableReason = [False, False, False] # F, A, S
+            unstableReasons = [ [], [], [], [] ]  # F1, F2, A, S
             while distance < 1 and hAGL <= 150 and hAGL >= 50:
-                #isGoAround = False
                 airplaneHdg = parameters[4]['data'][i]
                 airplaneIAS = parameters[2]['data'][i]
                 airplaneVAS = parameters[3]['data'][i]
 
                 if runway is not None:
-                    cond_F = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 10 and \
-                            abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
+                    cond_F1 = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 10 
+                    cond_F2 = abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
                 else:
-                    cond_F = True
+                    cond_F1 = cond_F2 = True
                 cond_A = airplaneIAS >= 55 and airplaneIAS <= 75
                 cond_S = airplaneVAS >= -1000
-                if not cond_F or not cond_A or not cond_S:
-                    print "F=%s, A=%s, S=%s" % (cond_F, cond_A, cond_S)
-                    if not cond_F:
+                if not cond_F1 or not cond_F2 or not cond_A or not cond_S:
+                    print "F1=%s, F2=%s, A=%s, S=%s" % (cond_F1, cond_F2, cond_A, cond_S)
+                    if not cond_F1:
                         print "\tRunway Heading: %s" % runway.magHeading
                         print "\tAirplane Heading: %s" % airplaneHdg
+                        unstableReasons[0].append(airplaneHdg)
+                    if not cond_F2:
                         print "\tCrossTrackToCenterLine: %s" % crossTrackToCenterLine(airplaneLat, airplaneLon, runway)
-                        unstableReason[0] = True
+                        unstableReasons[1].append( crossTrackToCenterLine(airplaneLat, airplaneLon, runway) )
                     if not cond_A:
                         print "\tIndicated Airspeed: %s knots" % (airplaneIAS)
-                        unstableReason[1] = True
+                        unstableReasons[2].append(airplaneIAS)
                     if not cond_S:
                         print "\tVertical Airspeed: %s ft/min" % (airplaneVAS)
-                        unstableReason[2] = True
+                        unstableReasons[3].append(airplaneVAS)
                     temp_list.append(i)
-
                 elif len(temp_list) > 0:
-                    approaches[thisApproachID]['unstable'].append((temp_list[0], temp_list[-1]))
+                    approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
                     del temp_list[:]
                 i += 1
 
@@ -326,16 +346,14 @@ def analyzeApproach(startingIndex):
             end = start if start == i else i - 1
 
             if len(temp_list) > 0:
-                approaches[thisApproachID]['unstable'].append((temp_list[0], temp_list[-1]))
+                approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
             # end if
-            reason = ""
-            if unstableReason[0]:
-                reason += "F"
-            if unstableReason[1]:
-                reason += "A"
-            if unstableReason[2]:
-                reason += "S"
-            approaches[thisApproachID]['reason-code'] = reason
+            
+            approaches[thisApproachID]['F1'] = unstableReasons[0]
+            approaches[thisApproachID]['F2'] = unstableReasons[1]
+            approaches[thisApproachID]['A']  = unstableReasons[2]
+            approaches[thisApproachID]['S']  = unstableReasons[3]
+            
             i = analyzeLanding(end, airport, thisApproachID)
         # end if
 
@@ -553,6 +571,8 @@ def analyzeLanding(start, airport, thisApproachID):
     else:
         approaches[thisApproachID]['landing-type'] = 'go-around'
         print "Go Around?!?!?!"
+        
+    approaches[thisApproachID]['airport-code'] = airport.code
     approaches[thisApproachID]['landing-start'] = start
     approaches[thisApproachID]['landing-end'] = end
     print ""
