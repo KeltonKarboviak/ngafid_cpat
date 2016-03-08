@@ -64,21 +64,27 @@ parameters = {
         'label': 'Groundspeed',
         'units': 'kts'},
     10: {'param': 'latitude',
-        'data' : [],
-        'index': -1,
-        'label': 'Latitude',
-        'units': 'degrees'},
+         'data' : [],
+         'index': -1,
+         'label': 'Latitude',
+         'units': 'degrees'},
     11: {'param': 'longitude',
-        'data' : [],
-        'index': -1,
-        'label': 'Longitude',
-        'units': 'degrees'}
+         'data' : [],
+         'index': -1,
+         'label': 'Longitude',
+         'units': 'degrees'},
+    12: {'param': 'LatLon',
+         'data' : [],
+         'index': -1,
+         'label': 'LatLon',
+         'units': 'degrees'}
 }
 
 
 airports = {}
 approaches = {}
 approachID = 0
+
 
 '''
 Main function gets a list of all the files contained within the passed in
@@ -118,7 +124,7 @@ def main(argv):
         if '.csv' not in filename:
             continue # Skip file if it isn't a .csv
         elif os.path.isfile('%s/results_%s' % (resultsFolder, filename)):
-            continue # Skip file if it's results have already been calculated
+            continue # Skip file if its results have already been calculated
         flight = filename.split('.')[0]
         print 'Generating graph for: %s' % filename
 
@@ -129,8 +135,10 @@ def main(argv):
                 file.readline()
             if firstTime:         # If this is first time, get the data headers (line 10)
                 headers = file.readline().split(', ')
-                for key in parameters.keys(): # Find the corresponding header index for each label
-                    parameters[key]['index'] = headers.index( parameters[key]['param'] )
+                for key, param in parameters.items(): # Find the corresponding header index for each label
+                    try:
+                        param['index'] = headers.index( param['param'] )
+                    except ValueError, e: continue
                 firstTime = False
             else:
                 file.readline()
@@ -138,9 +146,11 @@ def main(argv):
             for line in file:
                 row = line.split(', ')
                 parameters[0]['data'].append( float(row[parameters[0]['index']]) / 60000 ) # Add time value
-                for key in parameters.keys(): # Add rest of param values (everything but time)
-                    if key != 0:
-                        parameters[key]['data'].append( float(row[parameters[key]['index']]) )
+                for key, param in parameters.items(): # Add rest of param values (everything but time)
+                    if key != 0 and key != 12:
+                        param['data'].append( float(row[param['index']]) )
+                parameters[12]['data'].append( LatLon(parameters[10]['data'][-1], parameters[11]['data'][-1]) )
+            # end for
 
         start = findInitialTakeOff()
         analyzeApproach(start)
@@ -230,6 +240,7 @@ def clearApproaches():
     for key in approaches.keys():
         del approaches[key]
 
+
 '''
 This function will find the initial takeoff and return the first time value after the initial takeoff
 @return the first time index after the initial takeoff
@@ -237,15 +248,15 @@ This function will find the initial takeoff and return the first time value afte
 def findInitialTakeOff():
     i = 0
     airplaneMSL = parameters[1]['data'][i]
-    airplaneLat = parameters[10]['data'][i]
-    airplaneLon = parameters[11]['data'][i]
-    airport = detectAirport(airplaneLat, airplaneLon)
+    airplanePoint = parameters[12]['data'][i]
+    airport = detectAirport(airplanePoint)
     hAGL = airplaneMSL - airport.alt
     while hAGL < 500 and i < len(parameters[0]['data']):
         airplaneMSL = parameters[1]['data'][i]
         hAGL = airplaneMSL - airport.alt
         i += 1
     return i
+
 
 '''
 This function will reset the approachID to 0 on the start of a new flight.
@@ -254,6 +265,7 @@ This function will reset the approachID to 0 on the start of a new flight.
 def resetApproachID():
     global approachID
     approachID = 0
+
 
 '''
 This function will return a unique approachID for each approach in the flight.
@@ -266,6 +278,7 @@ def getApproachID():
     approachID += 1
     return aID
 
+
 '''
 This function analyzes the flight data.
 So far we have implemented a check for full stops.
@@ -273,14 +286,14 @@ So far we have implemented a check for full stops.
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
 def analyzeApproach(startingIndex):
+    EARTH_RADIUS_MILES = 3959 # Radius of the earth in miles
     i = startingIndex
     while i < len(parameters[0]['data']):
         airplaneMSL = parameters[1]['data'][i]
-        airplaneLat = parameters[10]['data'][i]
-        airplaneLon = parameters[11]['data'][i]
+        airplanePoint = parameters[12]['data'][i]
 
-        airport = detectAirport(airplaneLat, airplaneLon)
-        distance = haversine(airplaneLat, airplaneLon, airport.lat, airport.lon)
+        airport = detectAirport(airplanePoint)
+        distance = airplanePoint.distanceTo(airport.centerLatLon, EARTH_RADIUS_MILES)
         hAGL = airplaneMSL - airport.alt
 
         if (distance < 1 and hAGL < 500):
@@ -297,11 +310,10 @@ def analyzeApproach(startingIndex):
 
             start = i
 
-            airplaneLat = parameters[10]['data'][i]
-            airplaneLon = parameters[11]['data'][i]
             airplaneHdg = parameters[4]['data'][i]
+            airplanePoint = parameters[12]['data'][i]
 
-            runway = detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport)
+            runway = detectRunway(airplanePoint, airplaneHdg, airport)
             unstableReasons = [ [], [], [], [] ]  # F1, F2, A, S
             while distance < 1 and hAGL <= 150 and hAGL >= 50:
                 airplaneHdg = parameters[4]['data'][i]
@@ -310,7 +322,7 @@ def analyzeApproach(startingIndex):
 
                 if runway is not None:
                     cond_F1 = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 10 
-                    cond_F2 = abs(crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
+                    cond_F2 = abs(crossTrackToCenterLine(airplanePoint, runway)) <= 50
                 else:
                     cond_F1 = cond_F2 = True
                 cond_A = airplaneIAS >= 55 and airplaneIAS <= 75
@@ -322,8 +334,8 @@ def analyzeApproach(startingIndex):
                         print "\tAirplane Heading: %s" % airplaneHdg
                         unstableReasons[0].append(airplaneHdg)
                     if not cond_F2:
-                        print "\tCrossTrackToCenterLine: %s" % crossTrackToCenterLine(airplaneLat, airplaneLon, runway)
-                        unstableReasons[1].append( crossTrackToCenterLine(airplaneLat, airplaneLon, runway) )
+                        print "\tCrossTrackToCenterLine: %s" % crossTrackToCenterLine(airplanePoint, runway)
+                        unstableReasons[1].append( crossTrackToCenterLine(airplanePoint, runway) )
                     if not cond_A:
                         print "\tIndicated Airspeed: %s knots" % (airplaneIAS)
                         unstableReasons[2].append(airplaneIAS)
@@ -337,9 +349,8 @@ def analyzeApproach(startingIndex):
                 i += 1
 
                 airplaneMSL = parameters[1]['data'][i]
-                airplaneLat = parameters[10]['data'][i]
-                airplaneLon = parameters[11]['data'][i]
-                distance = haversine(airplaneLat, airplaneLon, airport.lat, airport.lon)
+                airplanePoint = parameters[12]['data'][i]
+                distance = airplanePoint.distanceTo(airport.centerLatLon, EARTH_RADIUS_MILES)
                 hAGL = airplaneMSL - airport.alt
             # end while
 
@@ -347,7 +358,6 @@ def analyzeApproach(startingIndex):
 
             if len(temp_list) > 0:
                 approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
-            # end if
             
             approaches[thisApproachID]['F1'] = unstableReasons[0]
             approaches[thisApproachID]['F2'] = unstableReasons[1]
@@ -437,24 +447,19 @@ It performs this by scanning the airportData dictionary and calculating which
 @param: lat the latitude of the plane
 @param: lon the longitude of the plane
 @author: Wyatt Hedrick
-    # TODO Check altitude between plane and airport - Wyatt
-    # TODO Have function return True/False on whether the plane is going to approach the airport
-        (i.e. going in for a landing) - Kelton
 '''
-def detectAirport(lat, lon):
-    closestAirport = -1
+def detectAirport(airplanePoint):
+    ourAirport = None
     closestDifference = 0
-    for key in airports:
-        airportLat = airports[key].lat
-        airportLon = airports[key].lon
-        dLat = abs(lat - airportLat) # getting difference in lat and lon
-        dLon = abs(lon - airportLon)
+    for key, airport in airports.items():
+        dLat = abs(airport.centerLatLon.lat - airplanePoint.lat) # getting difference in lat and lon
+        dLon = abs(airport.centerLatLon.lon - airplanePoint.lon)
         totalDifference = dLat + dLon # adding the differences so we can compare and see which airport is the closest
-        if closestAirport == -1 or totalDifference < closestDifference: # if it is the first time or we found a closer airport
+        if ourAirport is None or totalDifference < closestDifference: # if it is the first time or we found a closer airport
+            ourAirport = airport
             closestDifference = totalDifference
-            closestAirport = key
-
-    return airports[closestAirport]
+    # end for
+    return ourAirport
 
 
 '''
@@ -466,18 +471,18 @@ This function will detect the runway that the airplane is going to attempt to la
 @returns: the runway object representing the runway the airplane is attempting to land on
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
-def detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport):
+def detectRunway(airplanePoint, airplaneHdg, airport):
     ourRunway = None
-    closestDifference = -1
+    closestDifference = 0
     for runway in airport.runways:
         if 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 20:
-            dLat = abs(runway.centerLat - airplaneLat) # getting difference in lat and lon
-            dLon = abs(runway.centerLon - airplaneLon)
+            dLat = abs(runway.centerLatLon.lat - airplanePoint.lat) # getting difference in lat and lon
+            dLon = abs(runway.centerLatLon.lon - airplanePoint.lon)
             totalDifference = dLat + dLon
             if ourRunway is None or totalDifference < closestDifference:
                 ourRunway = runway
                 closestDifference = totalDifference
-
+    # end for
     return ourRunway
 
 
@@ -492,40 +497,9 @@ GIS Mapping Tool for verification: http://gistools.igismap.com/bearing
 @returns: the distance in feet between the airplane and the center line of the runway
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
-def crossTrackToCenterLine(airplaneLat, airplaneLon, runway):
+def crossTrackToCenterLine(airplanePoint, runway):
     EARTH_RADIUS_FEET = 20900000  # Radius of the earth in feet
-    airplanePoint = LatLon(airplaneLat, airplaneLon)
-    runwayCenter = LatLon(runway.centerLat, runway.centerLon)
-    hdg = runway.trueHeading
-
-    return airplanePoint.crossTrackDistanceTo(runwayCenter, hdg, EARTH_RADIUS_FEET)
-
-
-'''
-This function calculates the distance (in miles) between 2 coordinates.
-Obtained formula from: http://www.movable-type.co.uk/scripts/latlong.html
-@param: lat1 the latitude of the first point
-@param: lon1 the longitude of the first point
-@param: lat2 the latitude of the second point
-@param: lon2 the longitude of the second point
-@param: radius (Mean) radius of earth (defaults to radius in miles)
-@return: the distance between the 2 points, in same units as radius
-@author: Wyatt Hedrick, Kelton Karboviak
-'''
-def haversine(lat1, lon1, lat2, lon2, radius=None):
-    radius = 3959 if radius is None else radius
-
-    rLat1 = math.radians(lat1)
-    rLat2 = math.radians(lat2)
-    deltaLat = math.radians( lat2 - lat1 )
-    deltaLon = math.radians( lon2 - lon1 )
-
-    a = math.sin(deltaLat/2) ** 2 +                   \
-        math.cos(rLat1) * math.cos(rLat2) *           \
-        math.sin(deltaLon/2) ** 2
-    c = 2 * math.atan2( math.sqrt(a), math.sqrt(1-a) )
-    d = radius * c
-    return d # distance between the two points in miles
+    return airplanePoint.crossTrackDistanceTo(runway.centerLatLon, runway.trueHeading, EARTH_RADIUS_FEET)
 
 
 '''
@@ -577,6 +551,8 @@ def analyzeLanding(start, airport, thisApproachID):
     approaches[thisApproachID]['landing-end'] = end
     print ""
     return end
+
+
 '''
 This function prints out a menu to the user for them to select parameters to graph.
 @return: a list of the options (1-11) the user chose

@@ -23,6 +23,7 @@ from Vector3d import Vector3d
  * @requires vector3d
 '''
 class LatLon(object):
+    ''' Instance Variables '''
     lat, lon = 0.0, 0.0
 
 
@@ -233,7 +234,7 @@ class LatLon(object):
         p = 5 if precision is None else precision
         str = '(%.{0}f, %.{0}f)'.format(p)
         return str % (self.lat, self.lon)
-# End LatLon class
+# end class LatLon
 
 
 '''

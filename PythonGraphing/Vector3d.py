@@ -24,6 +24,7 @@ import math
  * @module vector3d
 '''
 class Vector3d(object):
+    ''' Instance Variables '''
     x, y, z = 0.0, 0.0, 0.0
 
     '''
@@ -171,3 +172,4 @@ class Vector3d(object):
         p = 5 if precision is None else precision
         str = '<%.{0}f, %.{0}f, %.{0}f>'.format(p)
         return str % (self.x, self.y, self.z)
+# end class Vector3d

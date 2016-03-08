@@ -1,12 +1,18 @@
-class Runway:
-    airportCode, runwayCode = '', ''
-    alt, magHeading, trueHeading, centerLat, centerLon = 0.0, 0.0, 0.0, 0.0, 0.0
+from LatLon import LatLon
 
-    def __init__(self, airportCode, alt, runwayCode, magHdg, trueHdg, centerLat, centerLon):
+
+class Runway(object):
+    ''' Instance Variables '''
+    airportCode, runwayCode = '', ''
+    alt, magHeading, trueHeading = 0.0, 0.0, 0.0
+    centerLatLon = None
+
+
+    def __init__(self, airportCode, alt, runwayCode, magHdg, trueHdg, lat, lon):
         self.airportCode = airportCode
         self.alt = alt
         self.runwayCode = runwayCode
         self.magHeading = magHdg
         self.trueHeading = trueHdg
-        self.centerLat = centerLat
-        self.centerLon = centerLon
+        self.centerLatLon = LatLon(lat, lon)
+# end class Runway
