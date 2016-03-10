@@ -5,6 +5,18 @@ import os
 
 EARTH_RADIUS_MILES = 3959
 EARTH_RADIUS_FEET  = 20900000
+APPROACH_MIN_IAS = 55
+APPROACH_MAX_IAS = 75
+APPROACH_MAX_HEADING_ERROR = 10
+APPRAOCH_MIN_VAS = -1000
+APPROACH_MAX_CROSSTRACK_ERROR = 50
+APPROACH_MIN_DISTANCE = 1
+APPROACH_MIN_ALTITUDE_AGL = 500
+APPROACH_FINAL_MAX_ALTITUDE_AGL = 150
+APPROACH_FINAL_MIN_ALTITUDE_AGL = 50
+FULL_STOP_SPEED_INDICATOR = 35
+TOUCH_AND_GO_ELEVATION_INDICATOR = 5
+RUNWAY_SELECTION_INDICATOR = 20
 
 class FlightAnalyzer:
     parameters = {}
@@ -29,6 +41,31 @@ class FlightAnalyzer:
         self.outputToCSV()
         self.resetApproachID()
         return self.approaches
+
+    '''
+    Function clears the contents of the approaches dictionary
+    @author: Kelton Karboviak
+    '''
+    def clearApproaches(self):
+        for key in self.approaches.keys():
+            del self.approaches[key]
+
+    '''
+    This function will reset the approachID to 0 on the start of a new flight.
+    @author Wyatt Hedrick, Kelton Karboviak
+    '''
+    def resetApproachID(self):
+        self.approachID = 0
+
+    '''
+    This function will return a unique approachID for each approach in the flight.
+    @returns aID the unique approachID associated with the approach.
+    @author Wyatt Hedrick, Kelton Karboviak
+    '''
+    def getApproachID(self):
+        aID = self.approachID
+        self.approachID += 1
+        return aID
 
     '''
     This function will find the initial takeoff and return the first time value after the initial takeoff
@@ -63,13 +100,13 @@ class FlightAnalyzer:
             distance = airplanePoint.distanceTo(airport.centerLatLon, EARTH_RADIUS_MILES)
             hAGL = airplaneMSL - airport.alt
 
-            if (distance < 1 and hAGL < 500):
+            if (distance < APPROACH_MIN_DISTANCE and hAGL < APPROACH_MIN_ALTITUDE_AGL):
                 print "Airplane is approaching %s, %s" % (airport.city, airport.state)
                 thisApproachID = self.getApproachID()
                 self.approaches[thisApproachID] = {}
                 self.approaches[thisApproachID]['unstable'] = []
                 temp_list = []
-                while hAGL > 150 and hAGL < 500:
+                while hAGL > APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL < APPROACH_MIN_ALTITUDE_AGL:
                     i += 1
                     airplaneMSL = self.parameters[1]['data'][i]
                     hAGL = airplaneMSL - airport.alt
@@ -82,18 +119,18 @@ class FlightAnalyzer:
 
                 runway = self.detectRunway(airplanePoint, airplaneHdg, airport)
                 unstableReasons = [ [], [], [], [] ]  # F1, F2, A, S
-                while distance < 1 and hAGL <= 150 and hAGL >= 50:
+                while distance < APPROACH_MIN_DISTANCE and hAGL <= APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL >= APPROACH_FINAL_MIN_ALTITUDE_AGL:
                     airplaneHdg = self.parameters[4]['data'][i]
                     airplaneIAS = self.parameters[2]['data'][i]
                     airplaneVAS = self.parameters[3]['data'][i]
 
                     if runway is not None:
-                        cond_F1 = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 10
-                        cond_F2 = abs(self.crossTrackToCenterLine(airplanePoint, runway)) <= 50
+                        cond_F1 = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= APPROACH_MAX_HEADING_ERROR
+                        cond_F2 = abs(self.crossTrackToCenterLine(airplanePoint, runway)) <= APPROACH_MAX_CROSSTRACK_ERROR
                     else:
                         cond_F1 = cond_F2 = True
-                    cond_A = airplaneIAS >= 55 and airplaneIAS <= 75
-                    cond_S = airplaneVAS >= -1000
+                    cond_A = airplaneIAS >= APPROACH_MIN_IAS and airplaneIAS <= APPROACH_MAX_IAS
+                    cond_S = airplaneVAS >= APPRAOCH_MIN_VAS
                     if not cond_F1 or not cond_F2 or not cond_A or not cond_S:
                         print "F1=%s, F2=%s, A=%s, S=%s" % (cond_F1, cond_F2, cond_A, cond_S)
                         if not cond_F1:
@@ -127,6 +164,7 @@ class FlightAnalyzer:
                     self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
                 # end if
 
+                self.approaches[thisApproachID]['runway-code'] = runway.runwayCode
                 self.approaches[thisApproachID]['F1'] = unstableReasons[0]
                 self.approaches[thisApproachID]['F2'] = unstableReasons[1]
                 self.approaches[thisApproachID]['A']  = unstableReasons[2]
@@ -150,16 +188,16 @@ class FlightAnalyzer:
         hAGL = airplaneMSL - airport.alt
         fullStop = False
         elevations = []
-        deltaElevation = 6
+        deltaElevation = TOUCH_AND_GO_ELEVATION_INDICATOR + 1
 
         fullStop = touchAndGo = False
 
-        while hAGL < 500 and i < len(self.parameters[0]['data']) - 1:
+        while hAGL < APPROACH_MIN_ALTITUDE_AGL and i < len(self.parameters[0]['data']) - 1:
             airplaneIAS = self.parameters[2]['data'][i]
             if (not fullStop):
-                if airplaneIAS <= 35:
+                if airplaneIAS <= FULL_STOP_SPEED_INDICATOR:
                     fullStop = True
-                elif deltaElevation <= 5:
+                elif deltaElevation <= TOUCH_AND_GO_ELEVATION_INDICATOR:
                     touchAndGo = True
             i += 1
             airplaneMSL = self.parameters[1]['data'][i]
@@ -239,7 +277,7 @@ class FlightAnalyzer:
         ourRunway = None
         closestDifference = 0
         for runway in airport.runways:
-            if 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 20:
+            if 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= RUNWAY_SELECTION_INDICATOR:
                 dLat = abs(runway.centerLatLon.lat - airplanePoint.lat) # getting difference in lat and lon
                 dLon = abs(runway.centerLatLon.lon - airplanePoint.lon)
                 totalDifference = dLat + dLon
@@ -261,15 +299,16 @@ class FlightAnalyzer:
     def outputToCSV(self):
         with open('%s/query_%s.csv' % (self.folder, self.timestamp), 'a') as globalOutput:
             with open('%s/results_%s.csv' % (self.folder, self.flightID), 'w') as output:
-                header = 'Flight_ID,Approach_ID,Airport_ID,Landing_Start,Landing_End,Landing_Type,Unstable?,F1_Heading,F2_CT,A_IAS,S_VAS\n'
+                header = 'Flight_ID,Approach_ID,Airport_ID,Runway_ID,Landing_Start,Landing_End,Landing_Type,Unstable?,F1_Heading,F2_CT,A_IAS,S_VAS\n'
                 if os.stat(globalOutput.name).st_size == 0:
                     globalOutput.write(header)
                 output.write(header)
                 for ID, approach in self.approaches.items():
-                    lineToWrite = '%s,%d,%s,%d,%d,%s,%s,%s,%s,%s,%s\n' % \
+                    lineToWrite = '%s,%d,%s,%s,%d,%d,%s,%s,%s,%s,%s,%s\n' % \
                                   (self.flightID,
                                    ID,
                                    approach['airport-code'],
+                                   approach['runway-code'],
                                    approach['landing-start'],
                                    approach['landing-end'],
                                    approach['landing-type'],
@@ -283,28 +322,3 @@ class FlightAnalyzer:
                 # end for
             # end with
         # end with
-
-    '''
-    Function clears the contents of the approaches dictionary
-    @author: Kelton Karboviak
-    '''
-    def clearApproaches(self):
-        for key in self.approaches.keys():
-            del self.approaches[key]
-
-    '''
-    This function will reset the approachID to 0 on the start of a new flight.
-    @author Wyatt Hedrick, Kelton Karboviak
-    '''
-    def resetApproachID(self):
-        self.approachID = 0
-
-    '''
-    This function will return a unique approachID for each approach in the flight.
-    @returns aID the unique approachID associated with the approach.
-    @author Wyatt Hedrick, Kelton Karboviak
-    '''
-    def getApproachID(self):
-        aID = self.approachID
-        self.approachID += 1
-        return aID
