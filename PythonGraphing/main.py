@@ -70,6 +70,11 @@ parameters = {
         'data' : [],
         'index': -1,
         'label': 'Longitude',
+        'units': 'degrees'},
+    12: {'param': 'LatLon',
+        'data': [],
+        'index': -1,
+        'label': 'LatLon',
         'units': 'degrees'}
 }
 
@@ -137,8 +142,10 @@ def main(argv):
                 file.readline()
             if firstTime:         # If this is first time, get the data headers (line 10)
                 headers = file.readline().split(', ')
-                for key in parameters.keys(): # Find the corresponding header index for each label
-                    parameters[key]['index'] = headers.index( parameters[key]['param'] )
+                for key, param in parameters.items(): # Find the corresponding header index for each label
+                    try:
+                        param['index'] = headers.index( param['param'] )
+                    except ValueError, e: continue
                 firstTime = False
             else:
                 file.readline()
@@ -146,9 +153,11 @@ def main(argv):
             for line in file:
                 row = line.split(', ')
                 parameters[0]['data'].append( float(row[parameters[0]['index']]) / 60000 ) # Add time value
-                for key in parameters.keys(): # Add rest of param values (everything but time)
-                    if key != 0:
-                        parameters[key]['data'].append( float(row[parameters[key]['index']]) )
+                for key, param in parameters.items(): # Add rest of param values (everything but time)
+                    if key != 0 and key != 12:
+                        param['data'].append( float(row[param['index']]) )
+                parameters[12]['data'].append( LatLon(parameters[10]['data'][-1], parameters[11]['data'][-1]) )
+                # end for
 
         approaches = Analyzer.analyze(flight, parameters)
         Grapher.graph(flight, parameters, approaches)

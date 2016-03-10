@@ -3,6 +3,9 @@ from LatLon import LatLon
 from Vector3d import Vector3d
 import os
 
+EARTH_RADIUS_MILES = 3959
+EARTH_RADIUS_FEET  = 20900000
+
 class FlightAnalyzer:
     parameters = {}
     airports = {}
@@ -34,9 +37,8 @@ class FlightAnalyzer:
     def findInitialTakeOff(self):
         i = 0
         airplaneMSL = self.parameters[1]['data'][i]
-        airplaneLat = self.parameters[10]['data'][i]
-        airplaneLon = self.parameters[11]['data'][i]
-        airport = self.detectAirport(airplaneLat, airplaneLon)
+        airplanePoint = self.parameters[12]['data'][i]
+        airport = self.detectAirport(airplanePoint)
         hAGL = airplaneMSL - airport.alt
         while hAGL < 500 and i < len(self.parameters[0]['data']):
             airplaneMSL = self.parameters[1]['data'][i]
@@ -55,11 +57,10 @@ class FlightAnalyzer:
         i = startingIndex
         while i < len(self.parameters[0]['data']):
             airplaneMSL = self.parameters[1]['data'][i]
-            airplaneLat =self.parameters[10]['data'][i]
-            airplaneLon = self.parameters[11]['data'][i]
+            airplanePoint = self.parameters[12]['data'][i]
 
-            airport = self.detectAirport(airplaneLat, airplaneLon)
-            distance = self.haversine(airplaneLat, airplaneLon, airport.lat, airport.lon)
+            airport = self.detectAirport(airplanePoint)
+            distance = airplanePoint.distanceTo(airport.centerLatLon, EARTH_RADIUS_MILES)
             hAGL = airplaneMSL - airport.alt
 
             if (distance < 1 and hAGL < 500):
@@ -76,11 +77,10 @@ class FlightAnalyzer:
 
                 start = i
 
-                airplaneLat = self.parameters[10]['data'][i]
-                airplaneLon = self.parameters[11]['data'][i]
                 airplaneHdg = self.parameters[4]['data'][i]
+                airplanePoint = self.parameters[12]['data'][i]
 
-                runway = self.detectRunway(airplaneLat, airplaneLon, airplaneHdg, airport)
+                runway = self.detectRunway(airplanePoint, airplaneHdg, airport)
                 unstableReasons = [ [], [], [], [] ]  # F1, F2, A, S
                 while distance < 1 and hAGL <= 150 and hAGL >= 50:
                     airplaneHdg = self.parameters[4]['data'][i]
@@ -89,7 +89,7 @@ class FlightAnalyzer:
 
                     if runway is not None:
                         cond_F1 = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 10
-                        cond_F2 = abs(self.crossTrackToCenterLine(airplaneLat, airplaneLon, runway)) <= 50
+                        cond_F2 = abs(self.crossTrackToCenterLine(airplanePoint, runway)) <= 50
                     else:
                         cond_F1 = cond_F2 = True
                     cond_A = airplaneIAS >= 55 and airplaneIAS <= 75
@@ -101,8 +101,8 @@ class FlightAnalyzer:
                             print "\tAirplane Heading: %s" % airplaneHdg
                             unstableReasons[0].append(airplaneHdg)
                         if not cond_F2:
-                            print "\tCrossTrackToCenterLine: %s" % self.crossTrackToCenterLine(airplaneLat, airplaneLon, runway)
-                            unstableReasons[1].append( self.crossTrackToCenterLine(airplaneLat, airplaneLon, runway) )
+                            print "\tCrossTrackToCenterLine: %s" % self.crossTrackToCenterLine(airplanePoint, runway)
+                            unstableReasons[1].append( self.crossTrackToCenterLine(airplanePoint, runway) )
                         if not cond_A:
                             print "\tIndicated Airspeed: %s knots" % (airplaneIAS)
                             unstableReasons[2].append(airplaneIAS)
@@ -116,9 +116,8 @@ class FlightAnalyzer:
                     i += 1
 
                     airplaneMSL = self.parameters[1]['data'][i]
-                    airplaneLat = self.parameters[10]['data'][i]
-                    airplaneLon = self.parameters[11]['data'][i]
-                    distance = self.haversine(airplaneLat, airplaneLon, airport.lat, airport.lon)
+                    airplanePoint = self.parameters[12]['data'][i]
+                    distance = airplanePoint.distanceTo(airport.centerLatLon, EARTH_RADIUS_MILES)
                     hAGL = airplaneMSL - airport.alt
                 # end while
 
@@ -201,40 +200,9 @@ class FlightAnalyzer:
     @returns: the distance in feet between the airplane and the center line of the runway
     @author: Wyatt Hedrick, Kelton Karboviak
     '''
-    def crossTrackToCenterLine(self, airplaneLat, airplaneLon, runway):
-        EARTH_RADIUS_FEET = 20900000  # Radius of the earth in feet
-        airplanePoint = LatLon(airplaneLat, airplaneLon)
-        runwayCenter = LatLon(runway.centerLat, runway.centerLon)
-        hdg = runway.trueHeading
+    def crossTrackToCenterLine(self, airplanePoint, runway):
+        return airplanePoint.crossTrackDistanceTo(runway.centerLatLon, runway.trueHeading, EARTH_RADIUS_FEET)
 
-        return airplanePoint.crossTrackDistanceTo(runwayCenter, hdg, EARTH_RADIUS_FEET)
-
-
-    '''
-    This function calculates the distance (in miles) between 2 coordinates.
-    Obtained formula from: http://www.movable-type.co.uk/scripts/latlong.html
-    @param: lat1 the latitude of the first point
-    @param: lon1 the longitude of the first point
-    @param: lat2 the latitude of the second point
-    @param: lon2 the longitude of the second point
-    @param: radius (Mean) radius of earth (defaults to radius in miles)
-    @return: the distance between the 2 points, in same units as radius
-    @author: Wyatt Hedrick, Kelton Karboviak
-    '''
-    def haversine(self, lat1, lon1, lat2, lon2, radius=None):
-        radius = 3959 if radius is None else radius
-
-        rLat1 = math.radians(lat1)
-        rLat2 = math.radians(lat2)
-        deltaLat = math.radians( lat2 - lat1 )
-        deltaLon = math.radians( lon2 - lon1 )
-
-        a = math.sin(deltaLat/2) ** 2 +                   \
-            math.cos(rLat1) * math.cos(rLat2) *           \
-            math.sin(deltaLon/2) ** 2
-        c = 2 * math.atan2( math.sqrt(a), math.sqrt(1-a) )
-        d = radius * c
-        return d # distance between the two points in miles
 
     '''
     This function detects the airport that is closest to the passed in coordinates.
@@ -243,24 +211,19 @@ class FlightAnalyzer:
     @param: lat the latitude of the plane
     @param: lon the longitude of the plane
     @author: Wyatt Hedrick
-        # TODO Check altitude between plane and airport - Wyatt
-        # TODO Have function return True/False on whether the plane is going to approach the airport
-            (i.e. going in for a landing) - Kelton
     '''
-    def detectAirport(self, lat, lon):
-        closestAirport = -1
+    def detectAirport(self, airplanePoint):
+        ourAirport = None
         closestDifference = 0
-        for key in self.airports:
-            airportLat = self.airports[key].lat
-            airportLon = self.airports[key].lon
-            dLat = abs(lat - airportLat) # getting difference in lat and lon
-            dLon = abs(lon - airportLon)
+        for key, airport in self.airports.items():
+            dLat = abs(airport.centerLatLon.lat - airplanePoint.lat) # getting difference in lat and lon
+            dLon = abs(airport.centerLatLon.lon - airplanePoint.lon)
             totalDifference = dLat + dLon # adding the differences so we can compare and see which airport is the closest
-            if closestAirport == -1 or totalDifference < closestDifference: # if it is the first time or we found a closer airport
+            if ourAirport is None or totalDifference < closestDifference: # if it is the first time or we found a closer airport
+                ourAirport = airport
                 closestDifference = totalDifference
-                closestAirport = key
-
-        return self.airports[closestAirport]
+        # end for
+        return ourAirport
 
 
     '''
@@ -272,18 +235,18 @@ class FlightAnalyzer:
     @returns: the runway object representing the runway the airplane is attempting to land on
     @author: Wyatt Hedrick, Kelton Karboviak
     '''
-    def detectRunway(self, airplaneLat, airplaneLon, airplaneHdg, airport):
+    def detectRunway(self, airplanePoint, airplaneHdg, airport):
         ourRunway = None
-        closestDifference = -1
+        closestDifference = 0
         for runway in airport.runways:
             if 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= 20:
-                dLat = abs(runway.centerLat - airplaneLat) # getting difference in lat and lon
-                dLon = abs(runway.centerLon - airplaneLon)
+                dLat = abs(runway.centerLatLon.lat - airplanePoint.lat) # getting difference in lat and lon
+                dLon = abs(runway.centerLatLon.lon - airplanePoint.lon)
                 totalDifference = dLat + dLon
                 if ourRunway is None or totalDifference < closestDifference:
                     ourRunway = runway
                     closestDifference = totalDifference
-
+        # end for
         return ourRunway
 
     '''
