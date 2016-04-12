@@ -3,6 +3,8 @@ from LatLon import LatLon
 from Vector3d import Vector3d
 import os
 
+
+''' GLOBAL EXCEEDANCE THRESHOLDS '''
 EARTH_RADIUS_MILES = 3959
 EARTH_RADIUS_FEET  = 20900000
 APPROACH_MIN_IAS = 55
@@ -17,6 +19,7 @@ APPROACH_FINAL_MIN_ALTITUDE_AGL = 50
 FULL_STOP_SPEED_INDICATOR = 35
 TOUCH_AND_GO_ELEVATION_INDICATOR = 5
 RUNWAY_SELECTION_INDICATOR = 20
+
 
 class FlightAnalyzer:
     parameters = {}
@@ -164,7 +167,7 @@ class FlightAnalyzer:
                     self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
                 # end if
 
-                self.approaches[thisApproachID]['runway-code'] = runway.runwayCode
+                self.approaches[thisApproachID]['runway-code'] = "-" if runway is None else runway.runwayCode
                 self.approaches[thisApproachID]['F1'] = unstableReasons[0]
                 self.approaches[thisApproachID]['F2'] = unstableReasons[1]
                 self.approaches[thisApproachID]['A']  = unstableReasons[2]
