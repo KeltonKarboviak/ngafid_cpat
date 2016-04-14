@@ -4,12 +4,12 @@ require 'LatLon.php';
 
 class Runway
 {
-        private $airportCode = "";
-        private $runwayCode = "";
-        private $alt = 0.0;
-        private $magHeading = 0.0;
-        private $trueHeading = 0.0;
-        private $centerLatLon = NULL;
+        public $airportCode = "";
+        public $runwayCode = "";
+        public $alt = 0.0;
+        public $magHeading = 0.0;
+        public $trueHeading = 0.0;
+        public $centerLatLon = NULL;
 
         function Runway($airportCode, $alt, $runwayCode, $magHeading, $trueHeading, $lat, $lon)
         {
@@ -18,7 +18,7 @@ class Runway
             $this->runwayCode = $runwayCode;
             $this->magHeading = $magHeading;
             $this->trueHeading = $trueHeading;
-            $this->centerLatLon = LatLon($lat, $lon);
+            $this->centerLatLon = new LatLon($lat, $lon);
         }
 }
 

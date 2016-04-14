@@ -4,13 +4,13 @@ require 'LatLon.php';
 
 class Airport
 {
-        private $code = "";
-        private $name = "";
-        private $city = "";
-        private $state = "";
-        private $centerLatLon = NULL;
-        private $alt = 0.0;
-        private $runways = array();
+        public $code = "";
+        public $name = "";
+        public $city = "";
+        public $state = "";
+        public $centerLatLon = NULL;
+        public $alt = 0.0;
+        public $runways = array();
 
         function Airport($code, $name, $city, $state, $lat, $lon, $alt)
         {
@@ -18,8 +18,7 @@ class Airport
             $this->name = $name;
             $this->city = $city;
             $this->state = $state;
-            $this->centerLatLon = LatLon($lat, $lon);
-            $this->runways = array();
+            $this->centerLatLon = new LatLon($lat, $lon);
         }
 
         function addRunway($runway)
@@ -28,4 +27,4 @@ class Airport
         }
 }
 
- ?>
+?>
