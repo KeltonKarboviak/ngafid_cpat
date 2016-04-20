@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import datetime
+import MySQLdb
 from FlightAnalysis import FlightAnalyzer
 from FlightGraphing import FlightGrapher
 from LatLon import LatLon
@@ -98,22 +99,7 @@ Main function gets a list of all the files contained within the passed in
 After the data is analyzed, it then calls makeGraph to create the graph image.
 @author: Wyatt Hedrick, Kelton Karboviak
 '''
-def main(argv):
-    if len(argv) != 1:
-        print '''
-#####################################
-#                                   #
-#  ./FlightDataGraphMaker <folder>  #
-#                                   #
-#####################################
-'''
-        exit()
-
-    folder = argv[0]
-    files = os.listdir(folder)
-
-    choices = menu()
-    headers = []
+def main(cursor, argv):
 
     getAirportData()
 
@@ -126,6 +112,22 @@ def main(argv):
     os.system('mkdir graphs')          # Make graphs folder if it doesn't exist
     os.system('mkdir ' + graphsFolder) # Make folder within graphs for this query
     os.system('mkdir results')         # Make results folder if it doesn't exist
+
+
+
+    for flight_id in argv:
+        sql = "SELECT time, msl_altitude, indicated_airspeed, vertical_airspeed, heading, latitude, longitude " \
+            + "FROM main " \
+            + "WHERE flight = %s;" % flight_id
+
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+
+        for row in rows:
+            for key, param in parameters.items():
+                if key == 0: param['data'].append( float(row[param['param']]) / 60000 )
+                else:        param['data'].append( float(row[param['param']]) )
+
 
     firstTime = True
     for filename in files:
@@ -169,7 +171,7 @@ Populate a dictionary containing airport data for all airports throughout the U.
 @author: Wyatt Hedrick
 '''
 def getAirportData():
-    with open('./Airports.csv', 'r') as file:
+    with open('../data/Airports.csv', 'r') as file:
         file.readline() # Trash line of data headers
         for line in file:
             row = line.split(',')
@@ -177,7 +179,7 @@ def getAirportData():
             a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
             airports[row[0]] = a # Insert into airports dict with airportCode as key
 
-    with open ('./AirportsDetailed.csv', 'r') as file:
+    with open ('../data/AirportsDetailed.csv', 'r') as file:
         file.readline() # Trash line of data headers
         for line in file:
             row = line.split(',')
@@ -222,10 +224,25 @@ def menu():
     return choices
 
 
+def usage():
+        print '''
+#####################################
+#                                   #
+#  ./main <flight_id> [flight_id]+  #
+#                                   #
+#####################################
+'''
+        exit()
+
+
 '''
 This checks to see if the program is being run directly via command-line. If it is, then it calls
     the main function passing in the command-line arguments
     # TODO Implement a command-line flag to have the program profile this program's run-time stats
 '''
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    if len(sys.argv < 2):
+        usage()
+
+    with MySQLdb.connect("localhost", "root", "NG@F1D", "dev_fdm_test") as db:
+        main(db.cursor(MySQLdb.cursors.DictCursor), sys.argv[1:])
