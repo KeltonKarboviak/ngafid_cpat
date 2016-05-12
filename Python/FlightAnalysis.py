@@ -1,4 +1,5 @@
 import math
+import MySQLdb
 from LatLon import LatLon
 from Vector3d import Vector3d
 import os
@@ -20,8 +21,15 @@ FULL_STOP_SPEED_INDICATOR = 35
 TOUCH_AND_GO_ELEVATION_INDICATOR = 5
 RUNWAY_SELECTION_INDICATOR = 20
 
+selectThresholdsSQL = "SELECT * FROM exceedance_thresholds WHERE aircraft_id = %s;"
+insertSQL = "INSERT INTO approaches (%s) VALUES %s;"
+insertKeys = "flight_id, airport_id, runway_id, landing_start, landing_end, landing_type, unstable, f1_heading, f2_crosstrack, a_ias, s_vas"
+updateAnalysesSQL = "UPDATE flight_analyses SET approach_analysis = 1 WHERE flight_id = %s"
+
 
 class FlightAnalyzer:
+    db = None
+    cursor = None
     parameters = {}
     airports = {}
     approaches = {}
@@ -30,20 +38,40 @@ class FlightAnalyzer:
     folder = ""
     flightID = ""
 
-    def __init__(self, time, folder, a):
+    def __init__(self, db, time, folder, a):
+        self.db = db
+        self.cursor = db.cursor(MySQLdb.cursors.DictCursor)
         self.timestamp = time
         self.folder = folder
         self.airports = a
 
-    def analyze(self, flightID, p):
+    def analyze(self, flightID, aircraftType, p):
         self.parameters = p
         self.flightID = flightID
         self.clearApproaches()
+        self.setThresholds(aircraftType)
         start = self.findInitialTakeOff()
         self.analyzeApproaches(start)
-        self.outputToCSV()
+        self.outputToDB()
         self.resetApproachID()
         return self.approaches
+
+    def setThresholds(self, aircraftType):
+        self.cursor.execute(selectThresholdsSQL, (aircraftType,))
+        row = self.cursor.fetchone()
+
+        APPROACH_MIN_IAS = row['approach_min_ias']
+        APPROACH_MAX_IAS = row['approach_max_ias']
+        APPROACH_MAX_HEADING_ERROR = row['approach_max_heading_error']
+        APPRAOCH_MIN_VAS = row['approach_min_vas']
+        APPROACH_MAX_CROSSTRACK_ERROR = row['approach_max_crosstrack_error']
+        APPROACH_MIN_DISTANCE = row['approach_min_distance']
+        APPROACH_MIN_ALTITUDE_AGL = row['approach_min_altitude_agl']
+        APPROACH_FINAL_MAX_ALTITUDE_AGL = row['approach_final_max_altitude_agl']
+        APPROACH_FINAL_MIN_ALTITUDE_AGL = row['approach_final_min_altitude_agl']
+        FULL_STOP_SPEED_INDICATOR = row['full_stop_speed_indicator']
+        TOUCH_AND_GO_ELEVATION_INDICATOR = row['touch_and_go_elevation_indicator']
+        RUNWAY_SELECTION_INDICATOR = row['runway_selection_indicator']
 
     '''
     Function clears the contents of the approaches dictionary
@@ -109,7 +137,7 @@ class FlightAnalyzer:
                 self.approaches[thisApproachID] = {}
                 self.approaches[thisApproachID]['unstable'] = []
                 temp_list = []
-                while hAGL > APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL < APPROACH_MIN_ALTITUDE_AGL:
+                while hAGL > APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL < APPROACH_MIN_ALTITUDE_AGL and i < len(self.parameters[0]['data']):
                     i += 1
                     airplaneMSL = self.parameters[1]['data'][i]
                     hAGL = airplaneMSL - airport.alt
@@ -122,7 +150,7 @@ class FlightAnalyzer:
 
                 runway = self.detectRunway(airplanePoint, airplaneHdg, airport)
                 unstableReasons = [ [], [], [], [] ]  # F1, F2, A, S
-                while distance < APPROACH_MIN_DISTANCE and hAGL <= APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL >= APPROACH_FINAL_MIN_ALTITUDE_AGL:
+                while distance < APPROACH_MIN_DISTANCE and hAGL <= APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL >= APPROACH_FINAL_MIN_ALTITUDE_AGL and i < len(self.parameters[0]['data']):
                     airplaneHdg = self.parameters[4]['data'][i]
                     airplaneIAS = self.parameters[2]['data'][i]
                     airplaneVAS = self.parameters[3]['data'][i]
@@ -153,12 +181,13 @@ class FlightAnalyzer:
                     elif len(temp_list) > 0:
                         self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
                         del temp_list[:]
-                    i += 1
-
+                    
                     airplaneMSL = self.parameters[1]['data'][i]
                     airplanePoint = self.parameters[12]['data'][i]
                     distance = airplanePoint.distanceTo(airport.centerLatLon, EARTH_RADIUS_MILES)
                     hAGL = airplaneMSL - airport.alt
+                    
+                    i += 1
                 # end while
 
                 end = start if start == i else i - 1
@@ -299,29 +328,44 @@ class FlightAnalyzer:
     @param folder string of the folder in which to store the result CSV file
     @author: Kelton Karboviak
     '''
-    def outputToCSV(self):
-        with open('%s/query_%s.csv' % (self.folder, self.timestamp), 'a') as globalOutput:
-            with open('%s/results_%s.csv' % (self.folder, self.flightID), 'w') as output:
-                header = 'Flight_ID,Approach_ID,Airport_ID,Runway_ID,Landing_Start,Landing_End,Landing_Type,Unstable?,F1_Heading,F2_CT,A_IAS,S_VAS\n'
-                if os.stat(globalOutput.name).st_size == 0:
-                    globalOutput.write(header)
-                output.write(header)
-                for ID, approach in self.approaches.items():
-                    lineToWrite = '%s,%d,%s,%s,%d,%d,%s,%s,%s,%s,%s,%s\n' % \
-                                  (self.flightID,
-                                   ID,
-                                   approach['airport-code'],
-                                   approach['runway-code'],
-                                   approach['landing-start'],
-                                   approach['landing-end'],
-                                   approach['landing-type'],
-                                   'Y' if len(approach['unstable']) > 0 else 'N',
-                                   "-" if len(approach['F1']) == 0 else sum(approach['F1'])/len(approach['F1']),
-                                   "-" if len(approach['F2']) == 0 else sum(approach['F2'])/len(approach['F2']),
-                                   "-" if len(approach['A'])  == 0 else sum(approach['A'])/len(approach['A']),
-                                   "-" if len(approach['S'])  == 0 else sum(approach['S'])/len(approach['S']))
-                    globalOutput.write(lineToWrite)
-                    output.write(lineToWrite)
-                # end for
-            # end with
-        # end with
+    def outputToDB(self):
+        # Return if approaches is empty, since no values will be inserted into DB
+        # But update flight_analyses table first
+        if len(self.approaches.keys()) == 0:
+            try:
+                self.cursor.execute( updateAnalysesSQL, (self.flightID,) )
+                self.db.commit()
+            except MySQLdb.Error, e:
+                print "MySQLdb Error [%d]: %s" % (e.args[0], e.args[1])
+                self.db.rollback()
+            return
+
+
+        values = []
+        for id, approach in self.approaches.items():
+            value = "%s, %s, %s, %d, %d, %s, %d, %s, %s, %s, %s" % \
+                    (self.flightID,
+                     "'%s'" % approach['airport-code'],
+                     "'%s'" % approach['runway-code'],
+                     approach['landing-start'],
+                     approach['landing-end'],
+                     "'%s'" % approach['landing-type'],
+                     1 if len(approach['unstable']) > 0 else 0,
+                     "NULL" if len(approach['F1']) == 0 else sum(approach['F1'])/len(approach['F1']),
+                     "NULL" if len(approach['F2']) == 0 else sum(approach['F2'])/len(approach['F2']),
+                     "NULL" if len(approach['A'])  == 0 else sum(approach['A'])/len(approach['A']),
+                     "NULL" if len(approach['S'])  == 0 else sum(approach['S'])/len(approach['S'])
+                    )
+            values.append( "(%s)" % value )
+        # end for
+
+        print insertSQL % (insertKeys, ', '.join(values)) # TEST TEST TEST
+
+        try:
+            self.cursor.execute( insertSQL % (insertKeys, ', '.join(values)) )
+            self.cursor.execute( updateAnalysesSQL, (self.flightID,) )
+            self.db.commit()
+        except MySQLdb.Error, e:
+            print "MySQLdb Error [%d]: %s\n" % (e.args[0], e.args[1])
+            print "Last Executed Query: ", self.cursor._last_executed
+            self.db.rollback()
