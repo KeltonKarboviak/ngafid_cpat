@@ -1,164 +1,207 @@
 #!/usr/bin/python
 
-import os
-import sys
-import time
-import datetime
+import argparse
+import contextlib
+import logging
+import multiprocessing
 import MySQLdb
-from FlightAnalysis import FlightAnalyzer
-#from FlightGraphing import FlightGrapher
-from LatLon import LatLon
+import time
 from Airport import Airport
+from FlightAnalysis import FlightAnalyzer
+from LatLon import LatLon
 from Runway import Runway
 
-parameters = {
-    0: {'param': 'time',
-        'data' : [],
-        'label': 'Time',
-        'units': 'minutes'},
-    1: {'param': 'msl_altitude',
-        'data' : [],
-        'label': 'Altitude',
-        'units': 'ft'},
-    2: {'param': 'indicated_airspeed',
-        'data' : [],
-        'label': 'Airspeed',
-        'units': 'kts'},
-    3: {'param': 'vertical_airspeed',
-        'data' : [],
-        'label': 'Vertical Airspeed',
-        'units': 'kts'},
-    4: {'param': 'heading',
-        'data' : [],
-        'label': 'Heading',
-        'units': 'degrees'},
-    10: {'param': 'latitude',
-        'data' : [],
-        'label': 'Latitude',
-        'units': 'degrees'},
-    11: {'param': 'longitude',
-        'data' : [],
-        'label': 'Longitude',
-        'units': 'degrees'},
-    12: {'param': 'LatLon',
-        'data': [],
-        'label': 'LatLon',
-        'units': 'degrees'}
-}
 
+""" LOGGING SETUP """
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(process)d - %(message)s")
+logger = logging.getLogger(__name__)
+
+""" IMPORT ENVIRONMENT-SPECIFIC CONFIGS """
+ENV = "DEV"
+
+if ENV == "DEV":
+    import config.db_config_DEV as db_config
+else:
+    import config.db_config_PROD as db_config
+
+
+""" SQL STATEMENTS """
+# fetchAirportDataSQL = "SELECT AirportCode, AirportName, City, StateCode, Latitude, Longitude, Elevation FROM dev_fdm_test.airports;"
+# fetchRunwayDataSQL = "SELECT AirportCode, Runway, tdze, magRunwayCourse, trueRunwayCourse, touchdownLat, touchdownLong FROM dev_fdm_test.airports_runways;"
+fetchFlightIDsSQL = "SELECT flight_id FROM flight_analyses WHERE approach_analysis = 0;"
+fetchAircraftTypeSQL = "SELECT aircraft_type FROM flight_id WHERE id = %s;"
+fetchFlightDataSQL = '''
+    SELECT
+        time, msl_altitude, indicated_airspeed, vertical_airspeed, heading, latitude, longitude, pitch_attitude, eng_1_rpm
+    FROM
+        main
+    WHERE
+        flight = %s
+    ORDER BY time ASC;
+'''
+
+""" GLOBAL VARIABLES """
+globalConn = None
+globalCursor = None
+globalFlightAnalyzer = None
 airports = {}
+NUM_CPUS = multiprocessing.cpu_count()  # Set number of CPUs to use for multiprocessing
 
-'''
-Function clears the contents of each sub-list in the passed in list.
-It does not delete the sub-lists themselves.
-For example, after this function: data = [ [], [], ... ]
-This happens by reference so data does not need to be returned.
-@author: Kelton Karboviak
-'''
-def clearData():
-    for key in parameters.keys():
-        del parameters[key]['data'][:]
 
-'''
-Main function gets a list of all the files contained within the passed in
-    folder name. Then scans through each file one-by-one in order to pass it
-    to the analyze data function to find approaches and landings.
-After the data is analyzed, it then calls makeGraph to create the graph image.
-@author: Wyatt Hedrick, Kelton Karboviak
-'''
-def main(db, argv):
-    cursor = db.cursor(MySQLdb.cursors.DictCursor)
+class Consumer(multiprocessing.Process):
 
+    def __init__(self, task_queue, skipOutputToDB):
+        multiprocessing.Process.__init__(self)
+        self.task_queue = task_queue
+        self.conn = MySQLdb.connect(**db_config.credentials)
+        self.cursor = self.conn.cursor(MySQLdb.cursors.DictCursor)
+        self.flightAnalyzer = FlightAnalyzer(self.conn, self.cursor, airports, skipOutput=skipOutputToDB)
+    # end def __init__()
+
+    def run(self):
+        while True:
+            next_task = self.task_queue.get()
+            if next_task is None:
+                print 'Tasks Complete! Exiting ...'
+                self.task_queue.task_done()
+                break
+            answer = next_task(connection=self.conn, analyzer=self.flightAnalyzer)
+            self.task_queue.task_done()
+    # end def run()
+
+# end class Consumer
+
+
+class Task(object):
+
+    def __init__(self, flightID):
+        self.flightID = flightID
+    # end def __init__()
+
+    def __call__(self, connection=None, analyzer=None):
+        logging.info("Now Analyzing Flight ID [%s]", self.flightID)
+
+        cursor = connection.cursor(MySQLdb.cursors.DictCursor)
+
+        try:
+            cursor.execute(fetchAircraftTypeSQL, (self.flightID,))
+            aircraftType = cursor.fetchone()['aircraft_type']
+
+            # Get the flight's data
+            cursor.execute(fetchFlightDataSQL, (self.flightID,))
+            rows = cursor.fetchall()
+
+            flightData = []
+            for row in rows:
+                # Before checking if flight data is valid, filter out data rows
+                # that contain NULL values
+                if None not in row.values():
+                    row['LatLon'] = LatLon(row['latitude'], row['longitude'])
+                    flightData.append(row)
+            # end for
+
+            approaches = analyzer.analyze(
+                self.flightID,
+                aircraftType,
+                flightData,
+                skipAnalysis=not isFlightDataValid(flightData[:10])
+            )
+
+            logging.info("Processing Complete Flight ID [%s]", self.flightID)
+        except MySQLdb.Error, e:
+            logging.exception("MySQLdb Error [%d]: %s", e.args[0], e.args[1])
+            logging.exception("Last Executed Query: %s", cursor._last_executed)
+
+        return -1
+    # end def __call__()
+
+# end class Task
+
+
+def main(flightIDs, runWithMultiProcess, skipOutputToDB):
+    '''
+    Main function gets a list of all the files contained within the passed in
+        folder name. Then scans through each file one-by-one in order to pass it
+        to the analyze data function to find approaches and landings.
+    After the data is analyzed, it then calls makeGraph to create the graph image.
+    @author: Wyatt Hedrick, Kelton Karboviak
+    '''
     # If there are no flight_ids passed as command-line args,
     # fetch all flights that haven't been analyzed for approaches yet
     # Otherwise the ids passed into argv will only be analyzed
-    if len(argv) == 0:
-        fetchFlightsSQL = "SELECT flight_id FROM flight_analyses WHERE approach_analysis = 0;"
-        cursor.execute(fetchFlightsSQL)
-        data = cursor.fetchall()
-        argv = [datum['flight_id'] for datum in data]
+    if len(flightIDs) == 0:
+        globalCursor.execute(fetchFlightIDsSQL)
+        flights = globalCursor.fetchall()
+        flightIDs = [flight['flight_id'] for flight in flights]
 
-    getAirportData()
+    loadAirportData()
 
-    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y_%m_%d_%H-%M-%S')
-    # graphsFolder = './graphs/' + 'AND'.join([parameters[c]['param'] for c in choices])
-    resultsFolder = './results'
-    Analyzer = FlightAnalyzer(db, timestamp, resultsFolder, airports)
-    #Grapher = FlightGrapher(choices, graphsFolder)
+    tasks = multiprocessing.JoinableQueue()
 
-    # os.system('mkdir graphs')          # Make graphs folder if it doesn't exist
-    # os.system('mkdir ' + graphsFolder) # Make folder within graphs for this query
-    # os.system('mkdir results')         # Make results folder if it doesn't exist
+    # If running in parallel, create NUM_CPUS number of Consumers for
+    #   processing tasks.
+    # If running linearly, only create 1 Consumer for processing tasks.
+    num_consumers = NUM_CPUS if runWithMultiProcess else 1
+    consumers = []
+    for i in xrange(num_consumers):
+        c = Consumer(tasks, skipOutputToDB)
+        c.start()
+        consumers.append(c)
 
-    fetchDataSQL = "SELECT time, msl_altitude, indicated_airspeed, vertical_airspeed, heading, latitude, longitude " \
-                 + "FROM main " \
-                 + "WHERE flight = %s;"
+    # Push all the flight IDs onto the tasks Queue for processing
+    for flightID in flightIDs:
+        tasks.put(Task(flightID))
 
-    fetchCraftTypeSQL = "SELECT DISTINCT fl.aircraft_type " \
-                      + "FROM main as ma, flight_id as fl " \
-                      + "WHERE fl.id = %s AND fl.id = ma.flight;"
+    # Push None's onto Queue to signal to Consumers to stop consuming
+    for i in xrange(num_consumers):
+        tasks.put(None)
 
-    for flight_id in argv:
-        print "Processing flight_id: ", flight_id
-        # check to see if flight exists at all
-        # check to see if it exists in approach table yet
+    # Cause main thread to wait for queue to be empty
+    tasks.join()
+# end def main()
 
-        clearData()  # Clear the parameters data for next flight
 
-        # Get the flight's aircraft type
-        cursor.execute(fetchCraftTypeSQL, (flight_id,))
-        aircraftType = cursor.fetchone()['aircraft_type']
-
-        # Get the flight's data
-        cursor.execute(fetchDataSQL, (flight_id,))
-        rows = cursor.fetchall()
-
-        for row in rows:
-            parameters[0]['data'].append( float(row['time']) / 60000 )  # Add time value
-            for key, param in parameters.items():
-                if key != 0 and key != 12:
-                    param['data'].append( float(row[param['param']]) )
-            parameters[12]['data'].append( LatLon(row['latitude'], row['longitude']) )
-        # end for
-
-        approaches = Analyzer.analyze(flight_id, aircraftType, parameters)
-        #Grapher.graph(flight, parameters, approaches)
-        print "Processing Complete!"
-        print "--------------------------------------------\n"
-    # end for
-    print 'Program Run Complete!'
-
-'''
-Populate a dictionary containing airport data for all airports throughout the U.S.
-@author: Wyatt Hedrick
-'''
-def getAirportData():
-    with open('../data/Airports.csv', 'r') as file:
-        file.readline() # Trash line of data headers
-        for line in file:
+def loadAirportData():
+    '''
+    Populate a dictionary containing airport data for all airports throughout the U.S.
+    @author: Wyatt Hedrick
+    '''
+    with open('../data/Airports.csv', 'r') as infile:
+        infile.readline()  # Trash line of data headers
+        for line in infile:
             row = line.split(',')
             #             code,   name,   city,  state,      latitude,     longitude,      altitude
             a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
-            airports[row[0]] = a # Insert into airports dict with airportCode as key
+            airports[row[0]] = a  # Insert into airports dict with airportCode as key
 
-    with open ('../data/AirportsDetailed.csv', 'r') as file:
-        file.readline() # Trash line of data headers
-        for line in file:
+    with open('../data/AirportsDetailed.csv', 'r') as infile:
+        infile.readline()  # Trash line of data headers
+        for line in infile:
             row = line.split(',')
             #     airportCode,      altitude, runwayCode,      magHdg,        trueHdg,      centerLat,      centerLon
             r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[12]), float(row[25]), float(row[26]))
-            airports[row[2]].addRunway(r) # Add runway to corresponding airport
+            airports[row[2]].addRunway(r)  # Add runway to corresponding airport
+# end def loadAirportData()
 
 
-def usage():
-        print '''
-#####################################
-#                                   #
-#  ./main <flight_id> [flight_id]+  #
-#                                   #
-#####################################
-'''
-        exit()
+def isFlightDataValid(data):
+    for value in data:
+        if value['latitude'] not in (0, None) or value['longitude'] not in (0, None):
+            return True
+    return False
+# end def isFlightDataValid()
+
+
+@contextlib.contextmanager
+def stopwatch(msg):
+    """ Context manager to print how long a block of code ran. """
+    t0 = time.time()
+    try:
+        yield
+    finally:
+        t1 = time.time()
+    logger.info("Total elapsed time for %s: %.3f seconds", msg, t1 - t0)
+# end def stopwatch()
 
 
 '''
@@ -167,13 +210,23 @@ This checks to see if the program is being run directly via command-line. If it 
     # TODO Implement a command-line flag to have the program profile this program's run-time stats
 '''
 if __name__ == "__main__":
+    # Parse command-line args
+    parser = argparse.ArgumentParser(description='Tool to detect approaches in flight data.')
+    parser.add_argument('flight_ids', metavar='flight_id', type=str, nargs='*', help='a flight_id to be analyzed')
+    parser.add_argument('-m', '--multi-process', action='store_true', help='run program with multiple processes')
+    parser.add_argument('--no-write', action='store_true', help='program will not write results to DB')
+    args = parser.parse_args()
 
-    db = None
+    print args.flight_ids, args.multi_process, args.no_write
+
     try:
-        db = MySQLdb.connect("localhost", "root", "NG@F1D", "dev_fdm_test")
-        main(db, sys.argv[1:])
+        globalConn = MySQLdb.connect(**db_config.credentials)
+        globalCursor = globalConn.cursor(MySQLdb.cursors.DictCursor)
+
+        with stopwatch("Program Execution"):
+            main(args.flight_ids, args.multi_process, args.no_write)
     except MySQLdb.Error, e:
         print "MySQLdb Error [%d]: %s\n" % (e.args[0], e.args[1])
-        print "Last Executed Query: ", self.cursor._last_executed
     finally:
-        if db is not None: db.close()
+        if globalConn is not None:
+            globalConn.close()
