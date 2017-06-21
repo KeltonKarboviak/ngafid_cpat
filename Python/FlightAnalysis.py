@@ -1,13 +1,9 @@
-import math
 import MySQLdb
-from LatLon import LatLon
-from Vector3d import Vector3d
-import os
 
 
 ''' GLOBAL EXCEEDANCE THRESHOLDS '''
 EARTH_RADIUS_MILES = 3959
-EARTH_RADIUS_FEET  = 20900000
+EARTH_RADIUS_FEET = 20900000
 APPROACH_MIN_IAS = 55
 APPROACH_MAX_IAS = 75
 APPROACH_MAX_HEADING_ERROR = 10
@@ -22,39 +18,51 @@ TOUCH_AND_GO_ELEVATION_INDICATOR = 5
 RUNWAY_SELECTION_INDICATOR = 20
 
 selectThresholdsSQL = "SELECT * FROM exceedance_thresholds WHERE aircraft_id = %s;"
-insertSQL = "INSERT INTO approaches (%s) VALUES %s;"
-insertKeys = "flight_id, airport_id, runway_id, landing_start, landing_end, landing_type, unstable, f1_heading, f2_crosstrack, a_ias, s_vas"
+
+insertKeysList = [
+    "flight_id", "approach_id", "airport_id", "runway_id",
+    "approach_start", "approach_end", "landing_start", "landing_end", "landing_type",
+    "unstable", "f1_heading", "f2_crosstrack", "a_ias", "s_vsi"
+]
+insertKeysSQL = ', '.join(insertKeysList)
+insertUpdateValuesSQL = ', '.join(["{0}=VALUES({0})".format(key) for key in insertKeysList])
+insertValuesPlaceholders = ', '.join(["%s"] * len(insertKeysList))
+insertSQL = "INSERT INTO approaches (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s;" % (insertKeysSQL, insertValuesPlaceholders, insertUpdateValuesSQL)
+
 updateAnalysesSQL = "UPDATE flight_analyses SET approach_analysis = 1 WHERE flight_id = %s"
 
 
-class FlightAnalyzer:
-    db = None
-    cursor = None
-    parameters = {}
-    airports = {}
-    approaches = {}
-    approachID = 0
-    timestamp = ""
-    folder = ""
-    flightID = ""
+class FlightAnalyzer(object):
 
-    def __init__(self, db, time, folder, a):
+    def __init__(self, db, cursor, airports, skipOutput=False):
         self.db = db
-        self.cursor = db.cursor(MySQLdb.cursors.DictCursor)
-        self.timestamp = time
-        self.folder = folder
-        self.airports = a
+        self.cursor = cursor
+        self.airports = airports
+        self.skipOutputToDB = skipOutput
+        self.approaches = {}
+        self.approachID = 0
+    # end def __init__()
 
-    def analyze(self, flightID, aircraftType, p):
-        self.parameters = p
+    def analyze(self, flightID, aircraftType, data, skipAnalysis=False):
         self.flightID = flightID
+        self.flightData = data
+        self.dataLength = len(data)
+
+        if not skipAnalysis:
+            # self.setThresholds(aircraftType)
+            start = self.findInitialTakeOff()
+            self.analyzeApproaches(start)
+
+        if not self.skipOutputToDB:
+            self.outputToDB()
+
+        # Reset global variables for next analysis
         self.clearApproaches()
-        self.setThresholds(aircraftType)
-        start = self.findInitialTakeOff()
-        self.analyzeApproaches(start)
-        self.outputToDB()
         self.resetApproachID()
+
+        # Return the dict of approaches
         return self.approaches
+    # end def analyze()
 
     def setThresholds(self, aircraftType):
         self.cursor.execute(selectThresholdsSQL, (aircraftType,))
@@ -72,105 +80,131 @@ class FlightAnalyzer:
         FULL_STOP_SPEED_INDICATOR = row['full_stop_speed_indicator']
         TOUCH_AND_GO_ELEVATION_INDICATOR = row['touch_and_go_elevation_indicator']
         RUNWAY_SELECTION_INDICATOR = row['runway_selection_indicator']
+    # end def setThresholds()
 
-    '''
-    Function clears the contents of the approaches dictionary
-    @author: Kelton Karboviak
-    '''
     def clearApproaches(self):
+        '''
+        Function clears the contents of the approaches dictionary
+        @author: Kelton Karboviak
+        '''
         for key in self.approaches.keys():
             del self.approaches[key]
+    # end def clearApproaches()
 
-    '''
-    This function will reset the approachID to 0 on the start of a new flight.
-    @author Wyatt Hedrick, Kelton Karboviak
-    '''
     def resetApproachID(self):
+        '''
+        This function will reset the approachID to 0 on the start of a new flight.
+        @author Wyatt Hedrick, Kelton Karboviak
+        '''
         self.approachID = 0
+    # end def resetApproachID()
 
-    '''
-    This function will return a unique approachID for each approach in the flight.
-    @returns aID the unique approachID associated with the approach.
-    @author Wyatt Hedrick, Kelton Karboviak
-    '''
-    def getApproachID(self):
+    def getAndIncApproachID(self):
+        '''
+        This function will return a unique approachID for each approach in the flight.
+        @return aID the unique approachID associated with the approach.
+        @author Wyatt Hedrick, Kelton Karboviak
+        '''
         aID = self.approachID
         self.approachID += 1
         return aID
+    # end def getAndIncApproachID()
 
-    '''
-    This function will find the initial takeoff and return the first time value after the initial takeoff
-    @return the first time index after the initial takeoff
-    '''
     def findInitialTakeOff(self):
+        '''
+        This function will find the initial takeoff and return the first time value after the initial takeoff
+        @return the first time index after the initial takeoff
+        '''
         i = 0
-        airplaneMSL = self.parameters[1]['data'][i]
-        airplanePoint = self.parameters[12]['data'][i]
+        airplaneMSL = self.flightData[i]['msl_altitude']
+        airplanePoint = self.flightData[i]['LatLon']
         airport = self.detectAirport(airplanePoint)
         hAGL = airplaneMSL - airport.alt
-        while hAGL < 500 and i < len(self.parameters[0]['data']):
-            airplaneMSL = self.parameters[1]['data'][i]
+        while hAGL < 500 and i < self.dataLength:
+            airplaneMSL = self.flightData[i]['msl_altitude']
             hAGL = airplaneMSL - airport.alt
             i += 1
         return i
+    # end def findInitialTakeOff()
 
+    def headingDifference(self, hdg1, hdg2):
+        return 180 - abs(abs(hdg1 - hdg2) - 180)
+    # end def headingDifference()
 
-    '''
-    This function analyzes the flight data.
-    So far we have implemented a check for full stops.
-    @param startingIndex the time index after the initial takeoff
-    @author: Wyatt Hedrick, Kelton Karboviak
-    '''
     def analyzeApproaches(self, startingIndex):
+        '''
+        This function analyzes the flight data.
+        So far we have implemented a check for full stops.
+        @param startingIndex the time index after the initial takeoff
+        @author: Wyatt Hedrick, Kelton Karboviak
+        '''
         i = startingIndex
-        while i < len(self.parameters[0]['data']):
-            airplaneMSL = self.parameters[1]['data'][i]
-            airplanePoint = self.parameters[12]['data'][i]
+        while i < self.dataLength:
+            airplaneMSL = self.flightData[i]['msl_altitude']
+            airplanePoint = self.flightData[i]['LatLon']
 
             airport = self.detectAirport(airplanePoint)
             distance = airplanePoint.distanceTo(airport.centerLatLon, EARTH_RADIUS_MILES)
             hAGL = airplaneMSL - airport.alt
 
-            if (distance < APPROACH_MIN_DISTANCE and hAGL < APPROACH_MIN_ALTITUDE_AGL):
-                print "Airplane is approaching %s, %s" % (airport.city, airport.state)
-                thisApproachID = self.getApproachID()
+            if distance < APPROACH_MIN_DISTANCE and hAGL < APPROACH_MIN_ALTITUDE_AGL:
+                print "Airplane is approaching %s, %s: %s" % (airport.city, airport.state, airport.code)
+
+                # hdgDiff = self.headingDifference(airport.magHeading, self.flightData[i]['heading'])
+                # if hdgDiff > 90:
+                #     print "\tcompCourse greater than 90: %f, time: %f" % (hdgDiff, self.flightData[i]['time'])
+                # elif hdgDiff > 15 and hdgDiff < 90:
+                #     print "\tcompCourse 15 < x < 90: %f, time: %f" % (hdgDiff, self.flightData[i]['time'])
+
+                thisApproachID = self.getAndIncApproachID()
                 self.approaches[thisApproachID] = {}
                 self.approaches[thisApproachID]['unstable'] = []
-                temp_list = []
-                while hAGL > APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL < APPROACH_MIN_ALTITUDE_AGL and i < len(self.parameters[0]['data']):
-                    i += 1
-                    airplaneMSL = self.parameters[1]['data'][i]
+
+                while hAGL > APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL < APPROACH_MIN_ALTITUDE_AGL and i < self.dataLength:
+                    airplaneMSL = self.flightData[i]['msl_altitude']
                     hAGL = airplaneMSL - airport.alt
+                    i += 1
                 # end while
 
                 start = i
 
-                airplaneHdg = self.parameters[4]['data'][i]
-                airplanePoint = self.parameters[12]['data'][i]
+                airplaneHdg = self.flightData[i]['heading']
+                airplanePoint = self.flightData[i]['LatLon']
 
                 runway = self.detectRunway(airplanePoint, airplaneHdg, airport)
+                print "Runway:", "Unknown" if runway is None else runway.runwayCode
+
+                temp_list = []
                 unstableReasons = [ [], [], [], [] ]  # F1, F2, A, S
-                while distance < APPROACH_MIN_DISTANCE and hAGL <= APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL >= APPROACH_FINAL_MIN_ALTITUDE_AGL and i < len(self.parameters[0]['data']):
-                    airplaneHdg = self.parameters[4]['data'][i]
-                    airplaneIAS = self.parameters[2]['data'][i]
-                    airplaneVAS = self.parameters[3]['data'][i]
+                while distance < APPROACH_MIN_DISTANCE and hAGL <= APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL >= APPROACH_FINAL_MIN_ALTITUDE_AGL and i < self.dataLength:
+                    airplaneHdg = self.flightData[i]['heading']
+                    airplaneIAS = self.flightData[i]['indicated_airspeed']
+                    airplaneVAS = self.flightData[i]['vertical_airspeed']
 
                     if runway is not None:
                         cond_F1 = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= APPROACH_MAX_HEADING_ERROR
-                        cond_F2 = abs(self.crossTrackToCenterLine(airplanePoint, runway)) <= APPROACH_MAX_CROSSTRACK_ERROR
+                        crossTrackError = self.crossTrackToCenterLine(airplanePoint, runway)
+                        cond_F2 = abs(crossTrackError) <= APPROACH_MAX_CROSSTRACK_ERROR
                     else:
                         cond_F1 = cond_F2 = True
+                    # end if/else
+
                     cond_A = airplaneIAS >= APPROACH_MIN_IAS and airplaneIAS <= APPROACH_MAX_IAS
                     cond_S = airplaneVAS >= APPRAOCH_MIN_VAS
-                    if not cond_F1 or not cond_F2 or not cond_A or not cond_S:
+
+                    # Check to see if any parameters went unstable.
+                    # if a condition is false, that means it was unstable
+                    airplaneIsUnstable = not (cond_F1 and cond_F2 and cond_A and cond_S)
+
+                    if airplaneIsUnstable:
                         print "F1=%s, F2=%s, A=%s, S=%s" % (cond_F1, cond_F2, cond_A, cond_S)
                         if not cond_F1:
                             print "\tRunway Heading: %s" % runway.magHeading
                             print "\tAirplane Heading: %s" % airplaneHdg
                             unstableReasons[0].append(airplaneHdg)
                         if not cond_F2:
-                            print "\tCrossTrackToCenterLine: %s" % self.crossTrackToCenterLine(airplanePoint, runway)
-                            unstableReasons[1].append( self.crossTrackToCenterLine(airplanePoint, runway) )
+                            print "\tCrossTrackToCenterLine: %s" % crossTrackError
+                            unstableReasons[1].append(crossTrackError)
                         if not cond_A:
                             print "\tIndicated Airspeed: %s knots" % (airplaneIAS)
                             unstableReasons[2].append(airplaneIAS)
@@ -181,12 +215,13 @@ class FlightAnalyzer:
                     elif len(temp_list) > 0:
                         self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
                         del temp_list[:]
-                    
-                    airplaneMSL = self.parameters[1]['data'][i]
-                    airplanePoint = self.parameters[12]['data'][i]
+                    # end if/elif
+
+                    airplaneMSL = self.flightData[i]['msl_altitude']
+                    airplanePoint = self.flightData[i]['LatLon']
                     distance = airplanePoint.distanceTo(airport.centerLatLon, EARTH_RADIUS_MILES)
                     hAGL = airplaneMSL - airport.alt
-                    
+
                     i += 1
                 # end while
 
@@ -196,51 +231,65 @@ class FlightAnalyzer:
                     self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
                 # end if
 
-                self.approaches[thisApproachID]['runway-code'] = "-" if runway is None else runway.runwayCode
+                self.approaches[thisApproachID]['airport-code'] = airport.code
+                self.approaches[thisApproachID]['runway-code'] = None if runway is None else runway.runwayCode
+                self.approaches[thisApproachID]['approach-start'] = start
+                self.approaches[thisApproachID]['approach-end'] = end
                 self.approaches[thisApproachID]['F1'] = unstableReasons[0]
                 self.approaches[thisApproachID]['F2'] = unstableReasons[1]
-                self.approaches[thisApproachID]['A']  = unstableReasons[2]
-                self.approaches[thisApproachID]['S']  = unstableReasons[3]
+                self.approaches[thisApproachID]['A'] = unstableReasons[2]
+                self.approaches[thisApproachID]['S'] = unstableReasons[3]
 
                 i = self.analyzeLanding(end, airport, thisApproachID)
             # end if
 
             i += 15
         # end while
+    # end def analyzeApproaches()
 
-    '''
-    This function will analyze the time after the final approach and before the plane reaches a height of 150 feet (or until the flight ends if it is the final landing).
-    @param: start the time index when the approach ends and the landing begins.
-    @param: airport the airport that the airplane is attempting to land at
-    @author: Wyatt Hedrick
-    '''
     def analyzeLanding(self, start, airport, thisApproachID):
+        '''
+        This function will analyze the time after the final approach and before the plane reaches a height of 150 feet (or until the flight ends if it is the final landing).
+        @param: start the time index when the approach ends and the landing begins.
+        @param: airport the airport that the airplane is attempting to land at
+        @author: Wyatt Hedrick
+        '''
         i = start
-        airplaneMSL = self.parameters[1]['data'][i]
+        airplaneMSL = self.flightData[i]['msl_altitude']
         hAGL = airplaneMSL - airport.alt
-        fullStop = False
         elevations = []
-        deltaElevation = TOUCH_AND_GO_ELEVATION_INDICATOR + 1
+        avgElevation = TOUCH_AND_GO_ELEVATION_INDICATOR + 1
 
         fullStop = touchAndGo = False
 
-        while hAGL < APPROACH_MIN_ALTITUDE_AGL and i < len(self.parameters[0]['data']) - 1:
-            airplaneIAS = self.parameters[2]['data'][i]
-            if (not fullStop):
+        while hAGL < APPROACH_MIN_ALTITUDE_AGL and i < self.dataLength - 1:
+            if not fullStop:
+                airplaneIAS = self.flightData[i]['indicated_airspeed']
                 if airplaneIAS <= FULL_STOP_SPEED_INDICATOR:
                     fullStop = True
-                elif deltaElevation <= TOUCH_AND_GO_ELEVATION_INDICATOR:
+                elif avgElevation <= TOUCH_AND_GO_ELEVATION_INDICATOR:
                     touchAndGo = True
+                # end if/elif
+            # end if
+
             i += 1
-            airplaneMSL = self.parameters[1]['data'][i]
+            airplaneMSL = self.flightData[i]['msl_altitude']
             hAGL = airplaneMSL - airport.alt
+
             if len(elevations) < 5:
                 elevations.append(hAGL)
             else:
                 elevations.pop(0)
                 elevations.append(hAGL)
-                deltaElevation = sum(elevations)/len(elevations)
+                avgElevation = sum(elevations) / len(elevations)
+            # end if/else
+        # end while
+
         end = i
+
+        # self.approaches[thisApproachID]['landing-type'] = 'stop-and-go' \
+        #     if fullStop \
+        #     else ('touch-and-go' if touchAndGo else 'go-around')
 
         if fullStop:
             self.approaches[thisApproachID]['landing-type'] = 'stop-and-go'
@@ -257,60 +306,60 @@ class FlightAnalyzer:
         self.approaches[thisApproachID]['landing-end'] = end
         print ""
         return end
+    # end def analyzeLanding()
 
-
-    '''
-    This function calculates the distance the airplane is from the center line in feet based on the passed in coordinates of the airplane and the runway the plane is attempting to land at.
-
-    GIS Mapping Tool for verification: http://gistools.igismap.com/bearing
-
-    @param: airplaneLat the latitude of the airplane
-    @param: airplaneLon the longitude of the airplane
-    @param: runway the runway object representing the closest runway to the airplane
-    @returns: the distance in feet between the airplane and the center line of the runway
-    @author: Wyatt Hedrick, Kelton Karboviak
-    '''
     def crossTrackToCenterLine(self, airplanePoint, runway):
+        '''
+        This function calculates the distance the airplane is from the center line in feet based on the passed in coordinates of the airplane and the runway the plane is attempting to land at.
+
+        GIS Mapping Tool for verification: http://gistools.igismap.com/bearing
+
+        @param: airplaneLat the latitude of the airplane
+        @param: airplaneLon the longitude of the airplane
+        @param: runway the runway object representing the closest runway to the airplane
+        @return: the distance in feet between the airplane and the center line of the runway
+        @author: Wyatt Hedrick, Kelton Karboviak
+        '''
         return airplanePoint.crossTrackDistanceTo(runway.centerLatLon, runway.trueHeading, EARTH_RADIUS_FEET)
+    # end def crossTrackToCenterLine()
 
-
-    '''
-    This function detects the airport that is closest to the passed in coordinates.
-    It performs this by scanning the airportData dictionary and calculating which
-        airport as the lowest total difference between lat/lon.
-    @param: lat the latitude of the plane
-    @param: lon the longitude of the plane
-    @author: Wyatt Hedrick
-    '''
     def detectAirport(self, airplanePoint):
+        '''
+        This function detects the airport that is closest to the passed in coordinates.
+        It performs this by scanning the airportData dictionary and calculating which
+            airport as the lowest total difference between lat/lon.
+        @param: lat the latitude of the plane
+        @param: lon the longitude of the plane
+        @author: Wyatt Hedrick
+        '''
         ourAirport = None
         closestDifference = 0
         for key, airport in self.airports.items():
-            dLat = abs(airport.centerLatLon.lat - airplanePoint.lat) # getting difference in lat and lon
+            dLat = abs(airport.centerLatLon.lat - airplanePoint.lat)  # getting difference in lat and lon
             dLon = abs(airport.centerLatLon.lon - airplanePoint.lon)
-            totalDifference = dLat + dLon # adding the differences so we can compare and see which airport is the closest
-            if ourAirport is None or totalDifference < closestDifference: # if it is the first time or we found a closer airport
+            totalDifference = dLat + dLon  # adding the differences so we can compare and see which airport is the closest
+            if ourAirport is None or totalDifference < closestDifference:  # if it is the first time or we found a closer airport
                 ourAirport = airport
                 closestDifference = totalDifference
         # end for
         return ourAirport
+    # end def detectAirport()
 
-
-    '''
-    This function will detect the runway that the airplane is going to attempt to land at.
-    @param: airplaneLat the latitude of the airplane
-    @param: airplaneLon the longitude of the airplane
-    @param: airplaneHdg the heading of the heading
-    @param: airport the airport object that represents the closest airport to the airplane
-    @returns: the runway object representing the runway the airplane is attempting to land on
-    @author: Wyatt Hedrick, Kelton Karboviak
-    '''
     def detectRunway(self, airplanePoint, airplaneHdg, airport):
+        '''
+        This function will detect the runway that the airplane is going to attempt to land at.
+        @param: airplaneLat the latitude of the airplane
+        @param: airplaneLon the longitude of the airplane
+        @param: airplaneHdg the heading of the heading
+        @param: airport the airport object that represents the closest airport to the airplane
+        @return: the runway object representing the runway the airplane is attempting to land on
+        @author: Wyatt Hedrick, Kelton Karboviak
+        '''
         ourRunway = None
         closestDifference = 0
         for runway in airport.runways:
             if 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= RUNWAY_SELECTION_INDICATOR:
-                dLat = abs(runway.centerLatLon.lat - airplanePoint.lat) # getting difference in lat and lon
+                dLat = abs(runway.centerLatLon.lat - airplanePoint.lat)  # getting difference in lat and lon
                 dLon = abs(runway.centerLatLon.lon - airplanePoint.lon)
                 totalDifference = dLat + dLon
                 if ourRunway is None or totalDifference < closestDifference:
@@ -318,54 +367,48 @@ class FlightAnalyzer:
                     closestDifference = totalDifference
         # end for
         return ourRunway
+    # end def detectRunway()
 
-    '''
-    Outputs the approach analysis information to a .csv file. The file will be saved to
-        ./results/results_flightID.csv, and appended to ./results/query_timestamp.csv
-    @param flightID string of the current flight ID to write to a CSV file
-    @param timestamp string of the timestamp when the program started running.
-        This will be used as the filename to store the results of all flights for this program run
-    @param folder string of the folder in which to store the result CSV file
-    @author: Kelton Karboviak
-    '''
     def outputToDB(self):
-        # Return if approaches is empty, since no values will be inserted into DB
-        # But update flight_analyses table first
-        if len(self.approaches.keys()) == 0:
-            try:
-                self.cursor.execute( updateAnalysesSQL, (self.flightID,) )
-                self.db.commit()
-            except MySQLdb.Error, e:
-                print "MySQLdb Error [%d]: %s" % (e.args[0], e.args[1])
-                self.db.rollback()
-            return
-
-
+        '''
+        Outputs the approach analysis information to the approaches table
+            within the database.
+        @return: None
+        @author: Kelton Karboviak
+        '''
         values = []
         for id, approach in self.approaches.items():
-            value = "%s, %s, %s, %d, %d, %s, %d, %s, %s, %s, %s" % \
-                    (self.flightID,
-                     "'%s'" % approach['airport-code'],
-                     "'%s'" % approach['runway-code'],
-                     approach['landing-start'],
-                     approach['landing-end'],
-                     "'%s'" % approach['landing-type'],
-                     1 if len(approach['unstable']) > 0 else 0,
-                     "NULL" if len(approach['F1']) == 0 else sum(approach['F1'])/len(approach['F1']),
-                     "NULL" if len(approach['F2']) == 0 else sum(approach['F2'])/len(approach['F2']),
-                     "NULL" if len(approach['A'])  == 0 else sum(approach['A'])/len(approach['A']),
-                     "NULL" if len(approach['S'])  == 0 else sum(approach['S'])/len(approach['S'])
-                    )
-            values.append( "(%s)" % value )
+            valuesTup = (
+                self.flightID,
+                id + 1,
+                approach['airport-code'],
+                approach['runway-code'],
+                approach['approach-start'],
+                approach['approach-end'],
+                approach['landing-start'],
+                approach['landing-end'],
+                approach['landing-type'],
+                int( len(approach['unstable']) > 0 ),
+                None if len(approach['F1']) == 0 else sum(approach['F1']) / len(approach['F1']),
+                None if len(approach['F2']) == 0 else sum(approach['F2']) / len(approach['F2']),
+                None if len(approach['A']) == 0 else sum(approach['A']) / len(approach['A']),
+                None if len(approach['S']) == 0 else sum(approach['S']) / len(approach['S'])
+            )
+            values.append(valuesTup)
         # end for
 
-        print insertSQL % (insertKeys, ', '.join(values)) # TEST TEST TEST
+        # print insertSQL % str(values)  # TEST TEST TEST
+        print '\n'.join([str(tup) for tup in values])
 
         try:
-            self.cursor.execute( insertSQL % (insertKeys, ', '.join(values)) )
+            # self.cursor.execute( insertSQL % ', '.join(values) )
+            if len(values) > 0:  # Check to see if flight has any approaches to insert
+                self.cursor.executemany(insertSQL, values)
             self.cursor.execute( updateAnalysesSQL, (self.flightID,) )
             self.db.commit()
         except MySQLdb.Error, e:
             print "MySQLdb Error [%d]: %s\n" % (e.args[0], e.args[1])
             print "Last Executed Query: ", self.cursor._last_executed
             self.db.rollback()
+    # end def outputToDB()
+# end class FlightAnalyzer
