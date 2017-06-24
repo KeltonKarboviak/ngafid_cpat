@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import config.db_config as db_config
 import contextlib
 import logging
 import multiprocessing
@@ -17,13 +18,8 @@ logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(leve
 logger = logging.getLogger(__name__)
 
 """ IMPORT ENVIRONMENT-SPECIFIC CONFIGS """
-ENV = "DEV"
-
-if ENV == "DEV":
-    import config.db_config_DEV as db_config
-else:
-    import config.db_config_PROD as db_config
-
+ENV = "dev"
+db_creds = db_config.credentials[ENV]
 
 """ SQL STATEMENTS """
 # fetchAirportDataSQL = "SELECT AirportCode, AirportName, City, StateCode, Latitude, Longitude, Elevation FROM dev_fdm_test.airports;"
@@ -53,7 +49,7 @@ class Consumer(multiprocessing.Process):
     def __init__(self, task_queue, skipOutputToDB):
         multiprocessing.Process.__init__(self)
         self.task_queue = task_queue
-        self.conn = MySQLdb.connect(**db_config.credentials)
+        self.conn = MySQLdb.connect(**db_creds)
         self.cursor = self.conn.cursor(MySQLdb.cursors.DictCursor)
         self.flightAnalyzer = FlightAnalyzer(self.conn, self.cursor, airports, skipOutput=skipOutputToDB)
     # end def __init__()
@@ -218,7 +214,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        globalConn = MySQLdb.connect(**db_config.credentials)
+        globalConn = MySQLdb.connect(**db_creds)
         globalCursor = globalConn.cursor(MySQLdb.cursors.DictCursor)
 
         with stopwatch("Program Execution"):
