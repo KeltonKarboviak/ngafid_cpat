@@ -7,7 +7,7 @@ EARTH_RADIUS_FEET = 20900000
 APPROACH_MIN_IAS = 55
 APPROACH_MAX_IAS = 75
 APPROACH_MAX_HEADING_ERROR = 10
-APPRAOCH_MIN_VAS = -1000
+APPRAOCH_MIN_VSI = -1000
 APPROACH_MAX_CROSSTRACK_ERROR = 50
 APPROACH_MIN_DISTANCE = 1
 APPROACH_MIN_ALTITUDE_AGL = 500
@@ -71,7 +71,7 @@ class FlightAnalyzer(object):
         APPROACH_MIN_IAS = row['approach_min_ias']
         APPROACH_MAX_IAS = row['approach_max_ias']
         APPROACH_MAX_HEADING_ERROR = row['approach_max_heading_error']
-        APPRAOCH_MIN_VAS = row['approach_min_vas']
+        APPRAOCH_MIN_VSI = row['approach_min_vas']
         APPROACH_MAX_CROSSTRACK_ERROR = row['approach_max_crosstrack_error']
         APPROACH_MIN_DISTANCE = row['approach_min_distance']
         APPROACH_MIN_ALTITUDE_AGL = row['approach_min_altitude_agl']
@@ -172,6 +172,12 @@ class FlightAnalyzer(object):
                 airplanePoint = self.flightData[i]['LatLon']
 
                 runway = self.detectRunway(airplanePoint, airplaneHdg, airport)
+
+                # Decide whether the point used to calculate the aircraft's
+                # distance should be the airport or runway.
+                # If runway is None, then we have to use the airport
+                referencePoint = airport.centerLatLon if runway is None else runway.centerLatLon
+
                 print "Runway:", "Unknown" if runway is None else runway.runwayCode
 
                 temp_list = []
@@ -179,7 +185,7 @@ class FlightAnalyzer(object):
                 while distance < APPROACH_MIN_DISTANCE and hAGL <= APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL >= APPROACH_FINAL_MIN_ALTITUDE_AGL and i < self.dataLength:
                     airplaneHdg = self.flightData[i]['heading']
                     airplaneIAS = self.flightData[i]['indicated_airspeed']
-                    airplaneVAS = self.flightData[i]['vertical_airspeed']
+                    airplaneVSI = self.flightData[i]['vertical_airspeed']
 
                     if runway is not None:
                         cond_F1 = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= APPROACH_MAX_HEADING_ERROR
@@ -190,7 +196,7 @@ class FlightAnalyzer(object):
                     # end if/else
 
                     cond_A = airplaneIAS >= APPROACH_MIN_IAS and airplaneIAS <= APPROACH_MAX_IAS
-                    cond_S = airplaneVAS >= APPRAOCH_MIN_VAS
+                    cond_S = airplaneVSI >= APPRAOCH_MIN_VSI
 
                     # Check to see if any parameters went unstable.
                     # if a condition is false, that means it was unstable
@@ -209,8 +215,8 @@ class FlightAnalyzer(object):
                             print "\tIndicated Airspeed: %s knots" % (airplaneIAS)
                             unstableReasons[2].append(airplaneIAS)
                         if not cond_S:
-                            print "\tVertical Airspeed: %s ft/min" % (airplaneVAS)
-                            unstableReasons[3].append(airplaneVAS)
+                            print "\tVertical Airspeed: %s ft/min" % (airplaneVSI)
+                            unstableReasons[3].append(airplaneVSI)
                         temp_list.append(i)
                     elif len(temp_list) > 0:
                         self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
@@ -219,7 +225,7 @@ class FlightAnalyzer(object):
 
                     airplaneMSL = self.flightData[i]['msl_altitude']
                     airplanePoint = self.flightData[i]['LatLon']
-                    distance = airplanePoint.distanceTo(airport.centerLatLon, EARTH_RADIUS_MILES)
+                    distance = airplanePoint.distanceTo(referencePoint, EARTH_RADIUS_MILES)
                     hAGL = airplaneMSL - airport.alt
 
                     i += 1
@@ -301,7 +307,6 @@ class FlightAnalyzer(object):
             self.approaches[thisApproachID]['landing-type'] = 'go-around'
             print "Go Around?!?!?!"
 
-        self.approaches[thisApproachID]['airport-code'] = airport.code
         self.approaches[thisApproachID]['landing-start'] = start
         self.approaches[thisApproachID]['landing-end'] = end
         print ""

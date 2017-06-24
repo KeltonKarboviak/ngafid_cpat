@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import argparse
 import contextlib
@@ -216,8 +216,6 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--multi-process', action='store_true', help='run program with multiple processes')
     parser.add_argument('--no-write', action='store_true', help='program will not write results to DB')
     args = parser.parse_args()
-
-    print args.flight_ids, args.multi_process, args.no_write
 
     try:
         globalConn = MySQLdb.connect(**db_config.credentials)
