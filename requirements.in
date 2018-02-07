@@ -1,0 +1,4 @@
+# requirements.in
+mysqlclient
+pandas
+python-dotenv
