@@ -1,51 +1,5 @@
-# NGAFID Specific Folders #
-###########################
-sample_flights/
-Good_Flight/
-graphs/
-results/
 
-# Compiled source #
-###################
-*.com
-*.class
-*.dll
-*.exe
-*.o
-*.so
-*.pyc
-
-# Packages #
-############
-# it's better to unpack these files and commit the raw source
-# git has its own built in compression methods
-*.7z
-*.dmg
-*.gz
-*.iso
-*.jar
-*.rar
-*.tar
-*.zip
-
-# Logs and databases #
-######################
-*.log
-*.sql
-*.sqlite
-
-# OS generated files #
-######################
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-
-# Created by https://www.gitignore.io/api/python
+# Created by https://www.gitignore.io/api/python,visualstudiocode
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
@@ -90,6 +44,7 @@ htmlcov/
 .coverage
 .coverage.*
 .cache
+.pytest_cache/
 nosetests.xml
 coverage.xml
 *.cover
@@ -98,10 +53,6 @@ coverage.xml
 # Translations
 *.mo
 *.pot
-
-# Django stuff:
-*.log
-local_settings.py
 
 # Flask stuff:
 instance/
@@ -150,6 +101,13 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+### VisualStudioCode ###
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history
 
-# End of https://www.gitignore.io/api/python
 
+# End of https://www.gitignore.io/api/python,visualstudiocode
