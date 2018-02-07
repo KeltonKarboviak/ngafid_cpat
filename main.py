@@ -165,7 +165,7 @@ def loadAirportData():
     Populate a dictionary containing airport data for all airports throughout the U.S.
     @author: Wyatt Hedrick
     """
-    with open('../data/Airports.csv', 'r') as infile:
+    with open('data/Airports.csv', 'r') as infile:
         infile.readline()  # Trash line of data headers
         for line in infile:
             row = line.split(',')
@@ -173,7 +173,7 @@ def loadAirportData():
             a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
             airports[row[0]] = a  # Insert into airports dict with airportCode as key
 
-    with open('../data/AirportsDetailed.csv', 'r') as infile:
+    with open('data/AirportsDetailed.csv', 'r') as infile:
         infile.readline()  # Trash line of data headers
         for line in infile:
             row = line.split(',')
