@@ -40,7 +40,6 @@ class Vector3d(object):
         self.x = x
         self.y = y
         self.z = z
-    # end def __init__()
 
     def __str__(self):
         '''
@@ -50,7 +49,6 @@ class Vector3d(object):
          * @returns {string} Vector represented as <x,y,z>.
         '''
         return "<{0:5f}, {1:5f}, {2:5f}>".format(self.x, self.y, self.z)
-    # end def __str__()
 
     def plus(self, v):
         '''
@@ -60,7 +58,6 @@ class Vector3d(object):
          * @returns {Vector3d} Vector representing sum of this and v.
         '''
         return Vector3d(self.x + v.x, self.y + v.y, self.z + v.z)
-    # end def plus()
 
     def minus(self, v):
         '''
@@ -70,7 +67,6 @@ class Vector3d(object):
          * @returns {Vector3d} Vector representing difference between this and v.
         '''
         return Vector3d(self.x - v.x, self.y - v.y, self.z - v.z)
-    # end def minus()
 
     def times(self, x):
         '''
@@ -80,7 +76,6 @@ class Vector3d(object):
          * @returns {Vector3d} Vector scaled by x.
         '''
         return Vector3d(self.x * x, self.y * x, self.z * x)
-    # end def times()
 
     def dividedBy(self, x):
         '''
@@ -90,7 +85,6 @@ class Vector3d(object):
          * @returns {Vector3d} Vector divided by x.
         '''
         return Vector3d(self.x / x, self.y / x, self.z / x)
-    # end def dividedBy()
 
     def dot(self, v):
         '''
@@ -100,7 +94,6 @@ class Vector3d(object):
          * @returns {number} Dot product of ‘this’ and v.
         '''
         return self.x*v.x + self.y*v.y + self.z*v.z
-    # end def dot()
 
     def cross(self, v):
         '''
@@ -114,7 +107,6 @@ class Vector3d(object):
         z = self.x*v.y - self.y*v.x
 
         return Vector3d(x, y, z)
-    # end def cross()
 
     def negate(self):
         '''
@@ -123,7 +115,6 @@ class Vector3d(object):
          * @returns {Vector3d} Negated vector.
         '''
         return Vector3d(-self.x, -self.y, -self.z)
-    # end def negate()
 
     def length(self):
         '''
@@ -132,7 +123,6 @@ class Vector3d(object):
          * @returns {number} Magnitude of this vector.
         '''
         return math.sqrt(self.x*self.x + self.y*self.y + self.z*self.z)
-    # end def length()
 
     def unit(self):
         '''
@@ -150,7 +140,6 @@ class Vector3d(object):
         z = self.z / norm
 
         return Vector3d(x, y, z)
-    # end def unit()
 
     def angleTo(self, v, vSign=None):
         '''
@@ -169,7 +158,6 @@ class Vector3d(object):
             sinTheta = -sinTheta if self.cross(v).dot(vSign) < 0 else sinTheta
 
         return math.atan2(sinTheta, cosTheta)
-    # end def angleTo()
 
     def toString(self, precision=5):
         '''
@@ -179,6 +167,5 @@ class Vector3d(object):
          * @returns {string} Vector represented as <x,y,z>.
         '''
         string = '<%.{0}f, %.{0}f, %.{0}f>'.format(precision)
+
         return string % (self.x, self.y, self.z)
-    # end def toString()
-# end class Vector3d

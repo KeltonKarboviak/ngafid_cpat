@@ -11,9 +11,6 @@ class Airport(object):
         self.centerLatLon = LatLon(lat, lon)
         self.alt = alt
         self.runways = []
-    # end def __init__()
 
     def addRunway(self, runway):
         self.runways.append(runway)
-    # end def addRunway()
-# end class Airport

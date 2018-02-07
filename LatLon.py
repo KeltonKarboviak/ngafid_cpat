@@ -37,7 +37,6 @@ class LatLon(object):
         '''
         self.lat = lat
         self.lon = lon
-    # end def __init__()
 
     def __str__(self):
         '''
@@ -46,7 +45,6 @@ class LatLon(object):
          * @returns {string} LatLon represented as (lat, lon).
         '''
         return "({0:5f}, {1:5f})".format(self.lat, self.lon)
-    # end def __str__()
 
     def toVector(self):
         '''
@@ -66,7 +64,6 @@ class LatLon(object):
         z = math.sin(rLat)
 
         return Vector3d(x, y, z)
-    # end def toVector()
 
     def greatCircle(self, bearing):
         '''
@@ -90,7 +87,6 @@ class LatLon(object):
         z =  math.cos(rLat) * math.sin(theta)
 
         return Vector3d(x, y, z)
-    # end def greatCircle()
 
     def distanceTo(self, point, radius=None):
         '''
@@ -114,7 +110,6 @@ class LatLon(object):
         d = delta * radius
 
         return d
-    # end def distanceTo()
 
     def bearingTo(self, point):
         '''
@@ -140,7 +135,6 @@ class LatLon(object):
         bearing = math.degrees( c1.angleTo(c2, p1) )
 
         return (bearing + 360) % 360  # normalize to [0, 360]
-    # end def bearingTo()
 
     def midpointTo(self, point):
         '''
@@ -160,7 +154,6 @@ class LatLon(object):
         mid = p1.plus(p2).unit()
 
         return mid.toLatLonS()
-    # end def midpointTo()
 
     def destinationPoint(self, distance, bearing, radius=None):
         '''
@@ -191,7 +184,6 @@ class LatLon(object):
         p2 = x.plus(y).unit()
 
         return p2.toLatLonS()
-    # end def destinationPoint()
 
     def crossTrackDistanceTo(self, pathStart, pathBrngEnd, radius=None):
         '''
@@ -228,7 +220,6 @@ class LatLon(object):
         d = alpha * radius
 
         return d
-    # end def crossTrackDistanceTo()
 
     def toString(self, precision=5):
         '''
@@ -238,9 +229,8 @@ class LatLon(object):
          * @returns {string} LatLon represented as (lat, lon).
         '''
         string = '(%.{0}f, %.{0}f)'.format(precision)
+
         return string % (self.lat, self.lon)
-    # end def toString()
-# end class LatLon
 
 
 def toLatLonS(self):
@@ -255,8 +245,8 @@ def toLatLonS(self):
     '''
     rLat = math.atan2(self.z, math.sqrt(self.x*self.x + self.y*self.y))
     rLon = math.atan2(self.y, self.x)
+
     return LatLon(math.degrees(rLat), math.degrees(rLon))
-# end def toLatLonS()
 
 
 # Assign toLatLonS function prototype to Vector3d class

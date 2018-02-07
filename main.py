@@ -53,7 +53,6 @@ class Consumer(multiprocessing.Process):
         self.conn = mysql.connect(**db_creds)
         self.cursor = self.conn.cursor(mysql.cursors.DictCursor)
         self.flightAnalyzer = FlightAnalyzer(self.conn, self.cursor, airports, skipOutput=skipOutputToDB)
-    # end def __init__()
 
     def run(self):
         while True:
@@ -64,16 +63,12 @@ class Consumer(multiprocessing.Process):
                 break
             answer = next_task(connection=self.conn, analyzer=self.flightAnalyzer)
             self.task_queue.task_done()
-    # end def run()
-
-# end class Consumer
 
 
 class Task(object):
 
     def __init__(self, flightID):
         self.flightID = flightID
-    # end def __init__()
 
     def __call__(self, connection=None, analyzer=None):
         logging.info("Now Analyzing Flight ID [%s]", self.flightID)
@@ -95,7 +90,6 @@ class Task(object):
                 if None not in list(row.values()):
                     row['LatLon'] = LatLon(row['latitude'], row['longitude'])
                     flightData.append(row)
-            # end for
 
             approaches = analyzer.analyze(
                 self.flightID,
@@ -110,9 +104,6 @@ class Task(object):
             logging.exception("Last Executed Query: %s", cursor._last_executed)
 
         return -1
-    # end def __call__()
-
-# end class Task
 
 
 def main(flightIDs, runWithMultiProcess, skipOutputToDB):
@@ -158,7 +149,6 @@ def main(flightIDs, runWithMultiProcess, skipOutputToDB):
 
     # Cause main thread to wait for queue to be empty
     tasks.join()
-# end def main()
 
 
 def loadAirportData():
@@ -181,7 +171,6 @@ def loadAirportData():
             #     airportCode,      altitude, runwayCode,      magHdg,        trueHdg,      centerLat,      centerLon
             r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[12]), float(row[25]), float(row[26]))
             airports[row[2]].addRunway(r)  # Add runway to corresponding airport
-# end def loadAirportData()
 
 
 def isFlightDataValid(data):
@@ -189,7 +178,6 @@ def isFlightDataValid(data):
         if value['latitude'] not in (0, None) or value['longitude'] not in (0, None):
             return True
     return False
-# end def isFlightDataValid()
 
 
 @contextlib.contextmanager
@@ -201,14 +189,8 @@ def stopwatch(msg):
     finally:
         t1 = time.time()
     logger.info("Total elapsed time for %s: %.3f seconds", msg, t1 - t0)
-# end def stopwatch()
 
 
-'''
-This checks to see if the program is being run directly via command-line. If it is, then it calls
-    the main function passing in the command-line arguments
-    # TODO Implement a command-line flag to have the program profile this program's run-time stats
-'''
 if __name__ == "__main__":
     # Parse command-line args
     parser = argparse.ArgumentParser(description='Tool to detect approaches in flight data.')

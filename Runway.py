@@ -10,5 +10,3 @@ class Runway(object):
         self.magHeading = magHdg
         self.trueHeading = trueHdg
         self.centerLatLon = LatLon(lat, lon)
-    # end def __init__()
-# end class Runway

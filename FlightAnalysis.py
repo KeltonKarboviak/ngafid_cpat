@@ -41,7 +41,6 @@ class FlightAnalyzer(object):
         self.skipOutputToDB = skipOutput
         self.approaches = {}
         self.approachID = 0
-    # end def __init__()
 
     def analyze(self, flightID, aircraftType, data, skipAnalysis=False):
         self.flightID = flightID
@@ -49,7 +48,7 @@ class FlightAnalyzer(object):
         self.dataLength = len(data)
 
         if not skipAnalysis and self.dataLength > 0:
-            # self.setThresholds(aircraftType)
+            self.setThresholds(aircraftType)
             start = self.findInitialTakeOff()
             self.analyzeApproaches(start)
 
@@ -62,7 +61,6 @@ class FlightAnalyzer(object):
 
         # Return the dict of approaches
         return self.approaches
-    # end def analyze()
 
     def setThresholds(self, aircraftType):
         self.cursor.execute(selectThresholdsSQL, (aircraftType,))
@@ -80,7 +78,6 @@ class FlightAnalyzer(object):
         FULL_STOP_SPEED_INDICATOR = row['full_stop_speed_indicator']
         TOUCH_AND_GO_ELEVATION_INDICATOR = row['touch_and_go_elevation_indicator']
         RUNWAY_SELECTION_INDICATOR = row['runway_selection_indicator']
-    # end def setThresholds()
 
     def clearApproaches(self):
         '''
@@ -89,7 +86,6 @@ class FlightAnalyzer(object):
         '''
         for key in self.approaches.keys():
             del self.approaches[key]
-    # end def clearApproaches()
 
     def resetApproachID(self):
         '''
@@ -97,7 +93,6 @@ class FlightAnalyzer(object):
         @author Wyatt Hedrick, Kelton Karboviak
         '''
         self.approachID = 0
-    # end def resetApproachID()
 
     def getAndIncApproachID(self):
         '''
@@ -108,7 +103,6 @@ class FlightAnalyzer(object):
         aID = self.approachID
         self.approachID += 1
         return aID
-    # end def getAndIncApproachID()
 
     def findInitialTakeOff(self):
         '''
@@ -125,11 +119,9 @@ class FlightAnalyzer(object):
             hAGL = airplaneMSL - airport.alt
             i += 1
         return i
-    # end def findInitialTakeOff()
 
     def headingDifference(self, hdg1, hdg2):
         return 180 - abs(abs(hdg1 - hdg2) - 180)
-    # end def headingDifference()
 
     def analyzeApproaches(self, startingIndex):
         '''
@@ -164,7 +156,6 @@ class FlightAnalyzer(object):
                     airplaneMSL = self.flightData[i]['msl_altitude']
                     hAGL = airplaneMSL - airport.alt
                     i += 1
-                # end while
 
                 # Decrement by 1 so that we are guaranteed that i < dataLength
                 start = i - 1
@@ -173,11 +164,6 @@ class FlightAnalyzer(object):
                 airplanePoint = self.flightData[start]['LatLon']
 
                 runway = self.detectRunway(airplanePoint, airplaneHdg, airport)
-
-                # Decide whether the point used to calculate the aircraft's
-                # distance should be the airport or runway.
-                # If runway is None, then we have to use the airport
-                # referencePoint = airport.centerLatLon if runway is None else runway.centerLatLon
 
                 print("Runway:", "Unknown" if runway is None else runway.runwayCode)
 
@@ -196,7 +182,6 @@ class FlightAnalyzer(object):
                         cond_F2 = abs(crossTrackError) <= APPROACH_MAX_CROSSTRACK_ERROR
                     else:
                         cond_F1 = cond_F2 = True
-                    # end if/else
 
                     cond_A = airplaneIAS >= APPROACH_MIN_IAS and airplaneIAS <= APPROACH_MAX_IAS
                     cond_S = airplaneVSI >= APPROACH_MIN_VSI
@@ -224,7 +209,6 @@ class FlightAnalyzer(object):
                     elif len(temp_list) > 0:
                         self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
                         del temp_list[:]
-                    # end if/elif
 
                     # Including the parameter values whether the approach is
                     # stable or unstable for being able to do comparisons with
@@ -241,13 +225,11 @@ class FlightAnalyzer(object):
                     hAGL = airplaneMSL - airport.alt
 
                     i += 1
-                # end while
 
                 end = start if start == i - 1 else i - 1
 
                 if len(temp_list) > 0:
                     self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
-                # end if
 
                 self.approaches[thisApproachID]['airport-code'] = airport.code
                 self.approaches[thisApproachID]['runway-code'] = None if runway is None else runway.runwayCode
@@ -263,11 +245,8 @@ class FlightAnalyzer(object):
                 self.approaches[thisApproachID]['VSI'] = allValues[3]
 
                 i = self.analyzeLanding(end, airport, thisApproachID)
-            # end if
 
             i += 15
-        # end while
-    # end def analyzeApproaches()
 
     def analyzeLanding(self, start, airport, thisApproachID):
         '''
@@ -291,8 +270,6 @@ class FlightAnalyzer(object):
                     fullStop = True
                 elif avgElevation <= TOUCH_AND_GO_ELEVATION_INDICATOR:
                     touchAndGo = True
-                # end if/elif
-            # end if
 
             i += 1
             airplaneMSL = self.flightData[i]['msl_altitude']
@@ -304,14 +281,8 @@ class FlightAnalyzer(object):
                 elevations.pop(0)
                 elevations.append(hAGL)
                 avgElevation = sum(elevations) / len(elevations)
-            # end if/else
-        # end while
 
         end = i
-
-        # self.approaches[thisApproachID]['landing-type'] = 'stop-and-go' \
-        #     if fullStop \
-        #     else ('touch-and-go' if touchAndGo else 'go-around')
 
         if fullStop:
             self.approaches[thisApproachID]['landing-type'] = 'stop-and-go'
@@ -326,8 +297,8 @@ class FlightAnalyzer(object):
         self.approaches[thisApproachID]['landing-start'] = start
         self.approaches[thisApproachID]['landing-end'] = end
         print("")
+
         return end
-    # end def analyzeLanding()
 
     def crossTrackToCenterLine(self, airplanePoint, runway):
         '''
@@ -342,7 +313,6 @@ class FlightAnalyzer(object):
         @author: Wyatt Hedrick, Kelton Karboviak
         '''
         return airplanePoint.crossTrackDistanceTo(runway.centerLatLon, runway.trueHeading, EARTH_RADIUS_FEET)
-    # end def crossTrackToCenterLine()
 
     def detectAirport(self, airplanePoint):
         '''
@@ -362,9 +332,8 @@ class FlightAnalyzer(object):
             if ourAirport is None or totalDifference < closestDifference:  # if it is the first time or we found a closer airport
                 ourAirport = airport
                 closestDifference = totalDifference
-        # end for
+
         return ourAirport
-    # end def detectAirport()
 
     def detectRunway(self, airplanePoint, airplaneHdg, airport):
         '''
@@ -386,9 +355,8 @@ class FlightAnalyzer(object):
                 if ourRunway is None or totalDifference < closestDifference:
                     ourRunway = runway
                     closestDifference = totalDifference
-        # end for
+
         return ourRunway
-    # end def detectRunway()
 
     def outputToDB(self):
         '''
@@ -420,14 +388,11 @@ class FlightAnalyzer(object):
                 None if len(approach['S']) == 0 else sum(approach['S']) / len(approach['S']),
             )
             values.append(valuesTup)
-        # end for
 
-        # print insertSQL % str(values)  # TEST TEST TEST
         print('\n'.join(str(tup) for tup in values))
 
         try:
-            # self.cursor.execute( insertSQL % ', '.join(values) )
-            if len(values) > 0:  # Check to see if flight has any approaches to insert
+            if len(values):  # Check to see if flight has any approaches to insert
                 self.cursor.executemany(insertSQL, values)
             self.cursor.execute( updateAnalysesSQL, (self.flightID,) )
             self.db.commit()
@@ -435,5 +400,3 @@ class FlightAnalyzer(object):
             print("MySQL Error [%d]: %s\n" % (e.args[0], e.args[1]))
             print("Last Executed Query: ", self.cursor._last_executed)
             self.db.rollback()
-    # end def outputToDB()
-# end class FlightAnalyzer
