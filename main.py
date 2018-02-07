@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
 import argparse
 import config.db_config as db_config
 import contextlib
@@ -58,7 +59,7 @@ class Consumer(multiprocessing.Process):
         while True:
             next_task = self.task_queue.get()
             if next_task is None:
-                print 'Tasks Complete! Exiting ...'
+                print('Tasks Complete! Exiting ...')
                 self.task_queue.task_done()
                 break
             answer = next_task(connection=self.conn, analyzer=self.flightAnalyzer)
@@ -91,7 +92,7 @@ class Task(object):
             for row in rows:
                 # Before checking if flight data is valid, filter out data rows
                 # that contain NULL values
-                if None not in row.values():
+                if None not in list(row.values()):
                     row['LatLon'] = LatLon(row['latitude'], row['longitude'])
                     flightData.append(row)
             # end for
@@ -104,7 +105,7 @@ class Task(object):
             )
 
             logging.info("Processing Complete Flight ID [%s]", self.flightID)
-        except mysql.Error, e:
+        except mysql.Error as e:
             logging.exception("MySQL Error [%d]: %s", e.args[0], e.args[1])
             logging.exception("Last Executed Query: %s", cursor._last_executed)
 
@@ -142,7 +143,7 @@ def main(flightIDs, runWithMultiProcess, skipOutputToDB):
     # If running linearly, only create 1 Consumer for processing tasks.
     num_consumers = NUM_CPUS if runWithMultiProcess else 1
     consumers = []
-    for i in xrange(num_consumers):
+    for i in range(num_consumers):
         c = Consumer(tasks, skipOutputToDB)
         c.start()
         consumers.append(c)
@@ -152,7 +153,7 @@ def main(flightIDs, runWithMultiProcess, skipOutputToDB):
         tasks.put(Task(flightID))
 
     # Push None's onto Queue to signal to Consumers to stop consuming
-    for i in xrange(num_consumers):
+    for i in range(num_consumers):
         tasks.put(None)
 
     # Cause main thread to wait for queue to be empty
@@ -222,8 +223,8 @@ if __name__ == "__main__":
 
         with stopwatch("Program Execution"):
             main(args.flight_ids, args.multi_process, args.no_write)
-    except mysql.Error, e:
-        print "MySQL Error [%d]: %s\n" % (e.args[0], e.args[1])
+    except mysql.Error as e:
+        print("MySQL Error [%d]: %s\n" % (e.args[0], e.args[1]))
     finally:
         if globalConn is not None:
             globalConn.close()

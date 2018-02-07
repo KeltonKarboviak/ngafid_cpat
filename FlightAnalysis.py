@@ -148,7 +148,7 @@ class FlightAnalyzer(object):
             hAGL = airplaneMSL - airport.alt
 
             if distance < APPROACH_MIN_DISTANCE and hAGL < APPROACH_MIN_ALTITUDE_AGL:
-                print "Airplane is approaching %s, %s: %s" % (airport.city, airport.state, airport.code)
+                print("Airplane is approaching %s, %s: %s" % (airport.city, airport.state, airport.code))
 
                 # hdgDiff = self.headingDifference(airport.magHeading, self.flightData[i]['heading'])
                 # if hdgDiff > 90:
@@ -179,7 +179,7 @@ class FlightAnalyzer(object):
                 # If runway is None, then we have to use the airport
                 # referencePoint = airport.centerLatLon if runway is None else runway.centerLatLon
 
-                print "Runway:", "Unknown" if runway is None else runway.runwayCode
+                print("Runway:", "Unknown" if runway is None else runway.runwayCode)
 
                 temp_list = []
                 allValues = [ [], [], [], [] ]
@@ -206,19 +206,19 @@ class FlightAnalyzer(object):
                     airplaneIsUnstable = not (cond_F1 and cond_F2 and cond_A and cond_S)
 
                     if airplaneIsUnstable:
-                        print "F1=%s, F2=%s, A=%s, S=%s" % (cond_F1, cond_F2, cond_A, cond_S)
+                        print("F1=%s, F2=%s, A=%s, S=%s" % (cond_F1, cond_F2, cond_A, cond_S))
                         if not cond_F1:
-                            print "\tRunway Heading: %s" % runway.magHeading
-                            print "\tAirplane Heading: %s" % airplaneHdg
+                            print("\tRunway Heading: %s" % runway.magHeading)
+                            print("\tAirplane Heading: %s" % airplaneHdg)
                             unstableReasons[0].append(headingError)
                         if not cond_F2:
-                            print "\tCrossTrackToCenterLine: %s" % crossTrackError
+                            print("\tCrossTrackToCenterLine: %s" % crossTrackError)
                             unstableReasons[1].append(crossTrackError)
                         if not cond_A:
-                            print "\tIndicated Airspeed: %s knots" % (airplaneIAS)
+                            print("\tIndicated Airspeed: %s knots" % (airplaneIAS))
                             unstableReasons[2].append(airplaneIAS)
                         if not cond_S:
-                            print "\tVertical Airspeed: %s ft/min" % (airplaneVSI)
+                            print("\tVertical Airspeed: %s ft/min" % (airplaneVSI))
                             unstableReasons[3].append(airplaneVSI)
                         temp_list.append(i)
                     elif len(temp_list) > 0:
@@ -315,17 +315,17 @@ class FlightAnalyzer(object):
 
         if fullStop:
             self.approaches[thisApproachID]['landing-type'] = 'stop-and-go'
-            print "Full Stop!!!!"
+            print("Full Stop!!!!")
         elif touchAndGo:
             self.approaches[thisApproachID]['landing-type'] = 'touch-and-go'
-            print "Touch and Go!!!!"
+            print("Touch and Go!!!!")
         else:
             self.approaches[thisApproachID]['landing-type'] = 'go-around'
-            print "Go Around?!?!?!"
+            print("Go Around?!?!?!")
 
         self.approaches[thisApproachID]['landing-start'] = start
         self.approaches[thisApproachID]['landing-end'] = end
-        print ""
+        print("")
         return end
     # end def analyzeLanding()
 
@@ -355,7 +355,7 @@ class FlightAnalyzer(object):
         '''
         ourAirport = None
         closestDifference = 0
-        for key, airport in self.airports.iteritems():
+        for key, airport in self.airports.items():
             dLat = abs(airport.centerLatLon.lat - airplanePoint.lat)  # getting difference in lat and lon
             dLon = abs(airport.centerLatLon.lon - airplanePoint.lon)
             totalDifference = dLat + dLon  # adding the differences so we can compare and see which airport is the closest
@@ -398,7 +398,7 @@ class FlightAnalyzer(object):
         @author: Kelton Karboviak
         '''
         values = []
-        for id, approach in self.approaches.iteritems():
+        for id, approach in self.approaches.items():
             valuesTup = (
                 self.flightID,
                 id + 1,
@@ -423,7 +423,7 @@ class FlightAnalyzer(object):
         # end for
 
         # print insertSQL % str(values)  # TEST TEST TEST
-        print '\n'.join([str(tup) for tup in values])
+        print('\n'.join(str(tup) for tup in values))
 
         try:
             # self.cursor.execute( insertSQL % ', '.join(values) )
@@ -431,9 +431,9 @@ class FlightAnalyzer(object):
                 self.cursor.executemany(insertSQL, values)
             self.cursor.execute( updateAnalysesSQL, (self.flightID,) )
             self.db.commit()
-        except mysql.Error, e:
-            print "MySQL Error [%d]: %s\n" % (e.args[0], e.args[1])
-            print "Last Executed Query: ", self.cursor._last_executed
+        except mysql.Error as e:
+            print("MySQL Error [%d]: %s\n" % (e.args[0], e.args[1]))
+            print("Last Executed Query: ", self.cursor._last_executed)
             self.db.rollback()
     # end def outputToDB()
 # end class FlightAnalyzer
