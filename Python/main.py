@@ -100,7 +100,7 @@ class Task(object):
                 self.flightID,
                 aircraftType,
                 flightData,
-                skipAnalysis=not isFlightDataValid(flightData[:10])
+                skipAnalysis=False  # not isFlightDataValid(flightData[:10])
             )
 
             logging.info("Processing Complete Flight ID [%s]", self.flightID)
@@ -129,6 +129,9 @@ def main(flightIDs, runWithMultiProcess, skipOutputToDB):
         globalCursor.execute(fetchFlightIDsSQL)
         flights = globalCursor.fetchall()
         flightIDs = [flight['flight_id'] for flight in flights]
+        # flightIDs = [392706, 393230, 382486, 387607, 393246, 388639, 382496, 393769, 387627, 389165, 395316, 383544, 389178, 387765, 383556, 393289, 382538, 394766, 387160, 388186, 388192, 390247, 386666, 387181, 395374, 394355, 381046, 392824, 394362, 394365, 387201, 392836, 384647, 392334, 393837, 385690, 384674, 394927, 388638, 392886, 392898, 386765, 389844, 389850, 382172, 382178, 384307, 394475, 386800, 383219, 394998, 392955, 388354, 383749, 384269, 384270, 382741, 381218, 383781, 385836, 389421, 383790, 381233, 385331, 392504, 384326, 395599, 393554, 393046, 392538, 387949, 394933, 381812, 394127, 389521, 388498, 394645, 384412, 390048, 389027, 384420, 381349, 383403, 386486, 393655, 384441, 384445, 390082, 384965, 384460, 382928, 395219, 395220, 390052, 384476, 385645, 397800, 397803, 390131, 385012]
+
+    logging.info('Number of Flights to Analyze: %4d', len(flightIDs))
 
     loadAirportData()
 
@@ -158,10 +161,10 @@ def main(flightIDs, runWithMultiProcess, skipOutputToDB):
 
 
 def loadAirportData():
-    '''
+    """
     Populate a dictionary containing airport data for all airports throughout the U.S.
     @author: Wyatt Hedrick
-    '''
+    """
     with open('../data/Airports.csv', 'r') as infile:
         infile.readline()  # Trash line of data headers
         for line in infile:

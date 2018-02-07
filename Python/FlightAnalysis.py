@@ -7,7 +7,7 @@ EARTH_RADIUS_FEET = 20900000
 APPROACH_MIN_IAS = 55
 APPROACH_MAX_IAS = 75
 APPROACH_MAX_HEADING_ERROR = 10
-APPRAOCH_MIN_VSI = -1000
+APPROACH_MIN_VSI = -1000
 APPROACH_MAX_CROSSTRACK_ERROR = 50
 APPROACH_MIN_DISTANCE = 1
 APPROACH_MIN_ALTITUDE_AGL = 500
@@ -22,7 +22,7 @@ selectThresholdsSQL = "SELECT * FROM exceedance_thresholds WHERE aircraft_id = %
 insertKeysList = [
     "flight_id", "approach_id", "airport_id", "runway_id",
     "approach_start", "approach_end", "landing_start", "landing_end", "landing_type",
-    "unstable", "f1_heading", "f2_crosstrack", "a_ias", "s_vsi"
+    "unstable", "all_heading", "f1_heading", "all_crosstrack", "f2_crosstrack", "all_ias", "a_ias", "all_vsi", "s_vsi"
 ]
 insertKeysSQL = ', '.join(insertKeysList)
 insertUpdateValuesSQL = ', '.join(["{0}=VALUES({0})".format(key) for key in insertKeysList])
@@ -48,7 +48,7 @@ class FlightAnalyzer(object):
         self.flightData = data
         self.dataLength = len(data)
 
-        if not skipAnalysis:
+        if not skipAnalysis and self.dataLength > 0:
             # self.setThresholds(aircraftType)
             start = self.findInitialTakeOff()
             self.analyzeApproaches(start)
@@ -71,7 +71,7 @@ class FlightAnalyzer(object):
         APPROACH_MIN_IAS = row['approach_min_ias']
         APPROACH_MAX_IAS = row['approach_max_ias']
         APPROACH_MAX_HEADING_ERROR = row['approach_max_heading_error']
-        APPRAOCH_MIN_VSI = row['approach_min_vas']
+        APPROACH_MIN_VSI = row['approach_min_vas']
         APPROACH_MAX_CROSSTRACK_ERROR = row['approach_max_crosstrack_error']
         APPROACH_MIN_DISTANCE = row['approach_min_distance']
         APPROACH_MIN_ALTITUDE_AGL = row['approach_min_altitude_agl']
@@ -166,21 +166,23 @@ class FlightAnalyzer(object):
                     i += 1
                 # end while
 
-                start = i
+                # Decrement by 1 so that we are guaranteed that i < dataLength
+                start = i - 1
 
-                airplaneHdg = self.flightData[i]['heading']
-                airplanePoint = self.flightData[i]['LatLon']
+                airplaneHdg = self.flightData[start]['heading']
+                airplanePoint = self.flightData[start]['LatLon']
 
                 runway = self.detectRunway(airplanePoint, airplaneHdg, airport)
 
                 # Decide whether the point used to calculate the aircraft's
                 # distance should be the airport or runway.
                 # If runway is None, then we have to use the airport
-                referencePoint = airport.centerLatLon if runway is None else runway.centerLatLon
+                # referencePoint = airport.centerLatLon if runway is None else runway.centerLatLon
 
                 print "Runway:", "Unknown" if runway is None else runway.runwayCode
 
                 temp_list = []
+                allValues = [ [], [], [], [] ]
                 unstableReasons = [ [], [], [], [] ]  # F1, F2, A, S
                 while distance < APPROACH_MIN_DISTANCE and hAGL <= APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL >= APPROACH_FINAL_MIN_ALTITUDE_AGL and i < self.dataLength:
                     airplaneHdg = self.flightData[i]['heading']
@@ -188,7 +190,8 @@ class FlightAnalyzer(object):
                     airplaneVSI = self.flightData[i]['vertical_airspeed']
 
                     if runway is not None:
-                        cond_F1 = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180) <= APPROACH_MAX_HEADING_ERROR
+                        headingError = 180 - abs(abs(runway.magHeading - airplaneHdg) - 180)
+                        cond_F1 = headingError <= APPROACH_MAX_HEADING_ERROR
                         crossTrackError = self.crossTrackToCenterLine(airplanePoint, runway)
                         cond_F2 = abs(crossTrackError) <= APPROACH_MAX_CROSSTRACK_ERROR
                     else:
@@ -196,7 +199,7 @@ class FlightAnalyzer(object):
                     # end if/else
 
                     cond_A = airplaneIAS >= APPROACH_MIN_IAS and airplaneIAS <= APPROACH_MAX_IAS
-                    cond_S = airplaneVSI >= APPRAOCH_MIN_VSI
+                    cond_S = airplaneVSI >= APPROACH_MIN_VSI
 
                     # Check to see if any parameters went unstable.
                     # if a condition is false, that means it was unstable
@@ -207,7 +210,7 @@ class FlightAnalyzer(object):
                         if not cond_F1:
                             print "\tRunway Heading: %s" % runway.magHeading
                             print "\tAirplane Heading: %s" % airplaneHdg
-                            unstableReasons[0].append(airplaneHdg)
+                            unstableReasons[0].append(headingError)
                         if not cond_F2:
                             print "\tCrossTrackToCenterLine: %s" % crossTrackError
                             unstableReasons[1].append(crossTrackError)
@@ -223,15 +226,24 @@ class FlightAnalyzer(object):
                         del temp_list[:]
                     # end if/elif
 
+                    # Including the parameter values whether the approach is
+                    # stable or unstable for being able to do comparisons with
+                    # the parameter distributions
+                    if runway is not None:
+                        allValues[0].append(headingError)
+                        allValues[1].append(crossTrackError)
+                    allValues[2].append(airplaneIAS)
+                    allValues[3].append(airplaneVSI)
+
                     airplaneMSL = self.flightData[i]['msl_altitude']
                     airplanePoint = self.flightData[i]['LatLon']
-                    distance = airplanePoint.distanceTo(referencePoint, EARTH_RADIUS_MILES)
+                    distance = airplanePoint.distanceTo(airport.centerLatLon, EARTH_RADIUS_MILES)
                     hAGL = airplaneMSL - airport.alt
 
                     i += 1
                 # end while
 
-                end = start if start == i else i - 1
+                end = start if start == i - 1 else i - 1
 
                 if len(temp_list) > 0:
                     self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
@@ -245,6 +257,10 @@ class FlightAnalyzer(object):
                 self.approaches[thisApproachID]['F2'] = unstableReasons[1]
                 self.approaches[thisApproachID]['A'] = unstableReasons[2]
                 self.approaches[thisApproachID]['S'] = unstableReasons[3]
+                self.approaches[thisApproachID]['HDG'] = allValues[0]
+                self.approaches[thisApproachID]['CTR'] = allValues[1]
+                self.approaches[thisApproachID]['IAS'] = allValues[2]
+                self.approaches[thisApproachID]['VSI'] = allValues[3]
 
                 i = self.analyzeLanding(end, airport, thisApproachID)
             # end if
@@ -339,7 +355,7 @@ class FlightAnalyzer(object):
         '''
         ourAirport = None
         closestDifference = 0
-        for key, airport in self.airports.items():
+        for key, airport in self.airports.iteritems():
             dLat = abs(airport.centerLatLon.lat - airplanePoint.lat)  # getting difference in lat and lon
             dLon = abs(airport.centerLatLon.lon - airplanePoint.lon)
             totalDifference = dLat + dLon  # adding the differences so we can compare and see which airport is the closest
@@ -382,7 +398,7 @@ class FlightAnalyzer(object):
         @author: Kelton Karboviak
         '''
         values = []
-        for id, approach in self.approaches.items():
+        for id, approach in self.approaches.iteritems():
             valuesTup = (
                 self.flightID,
                 id + 1,
@@ -394,10 +410,14 @@ class FlightAnalyzer(object):
                 approach['landing-end'],
                 approach['landing-type'],
                 int( len(approach['unstable']) > 0 ),
+                None if len(approach['HDG']) == 0 else sum(approach['HDG']) / len(approach['HDG']),
                 None if len(approach['F1']) == 0 else sum(approach['F1']) / len(approach['F1']),
+                None if len(approach['CTR']) == 0 else sum(approach['CTR']) / len(approach['CTR']),
                 None if len(approach['F2']) == 0 else sum(approach['F2']) / len(approach['F2']),
+                None if len(approach['IAS']) == 0 else sum(approach['IAS']) / len(approach['IAS']),
                 None if len(approach['A']) == 0 else sum(approach['A']) / len(approach['A']),
-                None if len(approach['S']) == 0 else sum(approach['S']) / len(approach['S'])
+                None if len(approach['VSI']) == 0 else sum(approach['VSI']) / len(approach['VSI']),
+                None if len(approach['S']) == 0 else sum(approach['S']) / len(approach['S']),
             )
             values.append(valuesTup)
         # end for
