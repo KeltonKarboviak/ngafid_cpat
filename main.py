@@ -2,12 +2,12 @@
 
 from __future__ import print_function
 import argparse
-import config.db_config as db_config
 import contextlib
 import logging
 import multiprocessing
 import MySQLdb as mysql
 import time
+from config import db_credentials
 from Airport import Airport
 from FlightAnalysis import FlightAnalyzer
 from LatLon import LatLon
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 """ IMPORT ENVIRONMENT-SPECIFIC CONFIGS """
 ENV = "dev"
-db_creds = db_config.credentials[ENV]
+db_creds = db_credentials[ENV]
 
 """ SQL STATEMENTS """
 # fetchAirportDataSQL = "SELECT AirportCode, AirportName, City, StateCode, Latitude, Longitude, Elevation FROM dev_fdm_test.airports;"
