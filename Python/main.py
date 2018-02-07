@@ -5,7 +5,7 @@ import config.db_config as db_config
 import contextlib
 import logging
 import multiprocessing
-import MySQLdb
+import MySQLdb as mysql
 import time
 from Airport import Airport
 from FlightAnalysis import FlightAnalyzer
@@ -49,8 +49,8 @@ class Consumer(multiprocessing.Process):
     def __init__(self, task_queue, skipOutputToDB):
         multiprocessing.Process.__init__(self)
         self.task_queue = task_queue
-        self.conn = MySQLdb.connect(**db_creds)
-        self.cursor = self.conn.cursor(MySQLdb.cursors.DictCursor)
+        self.conn = mysql.connect(**db_creds)
+        self.cursor = self.conn.cursor(mysql.cursors.DictCursor)
         self.flightAnalyzer = FlightAnalyzer(self.conn, self.cursor, airports, skipOutput=skipOutputToDB)
     # end def __init__()
 
@@ -77,7 +77,7 @@ class Task(object):
     def __call__(self, connection=None, analyzer=None):
         logging.info("Now Analyzing Flight ID [%s]", self.flightID)
 
-        cursor = connection.cursor(MySQLdb.cursors.DictCursor)
+        cursor = connection.cursor(mysql.cursors.DictCursor)
 
         try:
             cursor.execute(fetchAircraftTypeSQL, (self.flightID,))
@@ -104,8 +104,8 @@ class Task(object):
             )
 
             logging.info("Processing Complete Flight ID [%s]", self.flightID)
-        except MySQLdb.Error, e:
-            logging.exception("MySQLdb Error [%d]: %s", e.args[0], e.args[1])
+        except mysql.Error, e:
+            logging.exception("MySQL Error [%d]: %s", e.args[0], e.args[1])
             logging.exception("Last Executed Query: %s", cursor._last_executed)
 
         return -1
@@ -217,13 +217,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        globalConn = MySQLdb.connect(**db_creds)
-        globalCursor = globalConn.cursor(MySQLdb.cursors.DictCursor)
+        globalConn = mysql.connect(**db_creds)
+        globalCursor = globalConn.cursor(mysql.cursors.DictCursor)
 
         with stopwatch("Program Execution"):
             main(args.flight_ids, args.multi_process, args.no_write)
-    except MySQLdb.Error, e:
-        print "MySQLdb Error [%d]: %s\n" % (e.args[0], e.args[1])
+    except mysql.Error, e:
+        print "MySQL Error [%d]: %s\n" % (e.args[0], e.args[1])
     finally:
         if globalConn is not None:
             globalConn.close()

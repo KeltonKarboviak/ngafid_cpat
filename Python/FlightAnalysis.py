@@ -1,4 +1,4 @@
-import MySQLdb
+import MySQLdb as mysql
 
 
 ''' GLOBAL EXCEEDANCE THRESHOLDS '''
@@ -431,8 +431,8 @@ class FlightAnalyzer(object):
                 self.cursor.executemany(insertSQL, values)
             self.cursor.execute( updateAnalysesSQL, (self.flightID,) )
             self.db.commit()
-        except MySQLdb.Error, e:
-            print "MySQLdb Error [%d]: %s\n" % (e.args[0], e.args[1])
+        except mysql.Error, e:
+            print "MySQL Error [%d]: %s\n" % (e.args[0], e.args[1])
             print "Last Executed Query: ", self.cursor._last_executed
             self.db.rollback()
     # end def outputToDB()
