@@ -7,7 +7,11 @@
 click==6.7 \
     --hash=sha256:29f99fc6125fbc931b758dc053b3114e55c77a6e4c6c3a2674a2dc986016381d \
     --hash=sha256:f15516df478d5a56180fbf80e68f206010e6d160fc39fa508b65e035fd75130b \
-    # via python-dotenv
+    # via pip-tools, python-dotenv
+first==2.0.1 \
+    --hash=sha256:3bb3de3582cb27071cfb514f00ed784dc444b7f96dc21e140de65fe00585c95e \
+    --hash=sha256:41d5b64e70507d0c3ca742d68010a76060eea8a3d863e9b5130ab11a4a91aa0e \
+    # via pip-tools
 mysqlclient==1.3.12 \
     --hash=sha256:1e85e48b167e2af3bb08f273fdbd1ad6401cbe75057fa6513f97387dc7b282dc \
     --hash=sha256:2d9ec33de39f4d9c64ad7322ede0521d85829ce36a76f9dd3d6ab76a9c8648e5 \
@@ -55,6 +59,9 @@ pandas==0.22.0 \
     --hash=sha256:af0dbac881f6f87acd325415adea0ce8cccf28f5d4ad7a54b6a1e176e2f7bf70 \
     --hash=sha256:c2cd884794924687edbaad40d18ac984054d247bb877890932c4d41e3c3aba31 \
     --hash=sha256:c372db80a5bcb143c9cb254d50f902772c3b093a4f965275197ec2d2184b1e61
+pip-tools==1.11.0 \
+    --hash=sha256:50288eb066ce66dbef5401a21530712a93c659fe480c7d8d34e2379300555fa1 \
+    --hash=sha256:ba427b68443466c389e3b0b0ef55f537ab39344190ea980dfebb333d0e6a50a3
 python-dateutil==2.6.1 \
     --hash=sha256:891c38b2a02f5bb1be3e4793866c8df49c7d19baabf9c1bad62547e0b4866aca \
     --hash=sha256:95511bae634d69bc7329ba55e646499a842bc4ec342ad54a8cdb65645a0aad3c \
@@ -69,4 +76,4 @@ pytz==2017.3 \
 six==1.11.0 \
     --hash=sha256:70e8a77beed4562e7f14fe23a786b54f6296e34344c23bc42f07b15018ff98e9 \
     --hash=sha256:832dc0e10feb1aa2c68dcc57dbb658f1c7e65b9b61af69048abc87a2db00a0eb \
-    # via python-dateutil
+    # via pip-tools, python-dateutil
