@@ -84,8 +84,7 @@ class FlightAnalyzer(object):
         Function clears the contents of the approaches dictionary
         @author: Kelton Karboviak
         '''
-        for key in self.approaches.keys():
-            del self.approaches[key]
+        self.approaches.clear()
 
     def resetApproachID(self):
         '''
