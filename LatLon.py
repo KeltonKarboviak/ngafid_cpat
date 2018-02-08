@@ -44,7 +44,10 @@ class LatLon(object):
          *
          * @returns {string} LatLon represented as (lat, lon).
         '''
-        return "({0:5f}, {1:5f})".format(self.lat, self.lon)
+        return "<LatLon(lat={self.lat:5f}, lon={self.lon:5f})".format(self=self)
+
+    def __repr__(self):
+        return str(self)
 
     def toVector(self):
         '''
@@ -220,17 +223,6 @@ class LatLon(object):
         d = alpha * radius
 
         return d
-
-    def toString(self, precision=5):
-        '''
-         * String representation of LatLon point.
-         *
-         * @param   {number} [precision=5] - Number of decimal places to be used.
-         * @returns {string} LatLon represented as (lat, lon).
-        '''
-        string = '(%.{0}f, %.{0}f)'.format(precision)
-
-        return string % (self.lat, self.lon)
 
 
 def toLatLonS(self):

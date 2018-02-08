@@ -50,6 +50,9 @@ class Vector3d(object):
         '''
         return "<{0:5f}, {1:5f}, {2:5f}>".format(self.x, self.y, self.z)
 
+    def __repr__(self):
+        return str(self)
+
     def plus(self, v):
         '''
          * Adds supplied vector to ‘this’ vector.
@@ -158,14 +161,3 @@ class Vector3d(object):
             sinTheta = -sinTheta if self.cross(v).dot(vSign) < 0 else sinTheta
 
         return math.atan2(sinTheta, cosTheta)
-
-    def toString(self, precision=5):
-        '''
-         * String representation of vector.
-         *
-         * @param   {number} [precision=5] - Number of decimal places to be used.
-         * @returns {string} Vector represented as <x,y,z>.
-        '''
-        string = '<%.{0}f, %.{0}f, %.{0}f>'.format(precision)
-
-        return string % (self.x, self.y, self.z)
