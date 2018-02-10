@@ -1,4 +1,5 @@
 from LatLon import LatLon
+from numpy import nan
 
 
 class Airport(object):
@@ -23,3 +24,9 @@ class Airport(object):
 
     def addRunway(self, runway):
         self.runways.append(runway)
+
+
+class NullAirport(Airport):
+
+    def __init__(self):
+        super(NullAirport, self).__init__('', '', '', '', nan, nan, nan)

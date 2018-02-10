@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
+from Airport import NullAirport
 from math import fabs
 
 
 class QuadTree(object):
-    MIN_GRID_SIZE = 0.025
+    MIN_GRID_SIZE = 0.09
 
     def __init__(self, lat_min=-180, lat_max=180, lon_min=-180, lon_max=180):
         self._lat_min, self._lat_mid, self._lat_max = lat_min, (lat_min + lat_max) / 2.0, lat_max
@@ -36,12 +37,12 @@ class QuadTree(object):
     def __repr__(self):
         return str(self)
 
-    def get_lat_direction(self, lat):
+    def _get_lat_direction(self, lat):
         return ('south', (self._lat_min, self._lat_mid))
             if lat < self._lat_mid
             else ('north', (self._lat_mid, self._lat_max))
 
-    def get_lon_direction(self, lon):
+    def _get_lon_direction(self, lon):
         return ('west', (self._lon_min, self._lon_mid))
             if lon < self._lon_mid
             else ('east', (self._lon_mid, self._lon_max))
@@ -65,8 +66,8 @@ class QuadTree(object):
         if self._is_leaf:
             return self._airport
 
-        lat_dir = self.get_lat_direction(lat)
-        lon_dir = self.get_lon_direction(lon)
+        lat_dir = self._get_lat_direction(lat)
+        lon_dir = self._get_lon_direction(lon)
 
         direction = lat_dir[0] + lon_dir[0]
 
@@ -74,6 +75,6 @@ class QuadTree(object):
             airport = self._nodes[direction].get_nearest_airport(lat, lon)
         except AttributeError as e:
             # Did not find a corresponding node, so return None
-            airport = None
+            airport = NullAirport()
         finally:
             return airport
