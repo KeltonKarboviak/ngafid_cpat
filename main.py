@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 from config import db_credentials
 from Airport import Airport
-from FlightAnalysis import FlightAnalyzer
+from flight_analyzer import FlightAnalyzer
 from LatLon import LatLon
 from Runway import Runway
 from typing import Dict
@@ -29,19 +29,19 @@ db_creds = db_credentials[ENV]
 """ SQL STATEMENTS """
 # fetchAirportDataSQL = "SELECT AirportCode, AirportName, City, StateCode, Latitude, Longitude, Elevation FROM dev_fdm_test.airports;"
 # fetchRunwayDataSQL = "SELECT AirportCode, Runway, tdze, magRunwayCourse, trueRunwayCourse, touchdownLat, touchdownLong FROM dev_fdm_test.airports_runways;"
-fetchFlightIDsSQL = "SELECT flight_id FROM flight_analyses WHERE approach_analysis = 0;"
-fetchAircraftTypeSQL = "SELECT aircraft_type FROM flight_id WHERE id = %s;"
-fetchFlightDataSQL = '''
 fetchAirportDataSQL = 'SELECT id, name, city, state_code, latitude, longitude, elevation FROM test_airports;'
 fetchRunwayDataSQL = 'SELECT airport_id, id, touchdown_lat, touchdown_lon, tdze, magnetic_course, true_course FROM test_runways;'
+fetchFlightIDsSQL = 'SELECT flight_id FROM flight_analyses WHERE approach_analysis = 0;'
+fetchAircraftTypeSQL = 'SELECT aircraft_type FROM flight_id WHERE id = %s;'
+fetchFlightDataSQL = """
     SELECT
-        time, msl_altitude, derived_radio_altitude, indicated_airspeed, vertical_airspeed, heading, latitude, longitude, pitch_attitude, eng_1_rpm
+        time, msl_altitude, radio_altitude_derived, indicated_airspeed, vertical_airspeed, heading, latitude, longitude, pitch_attitude, eng_1_rpm
     FROM
         main
     WHERE
         flight = %s
     ORDER BY time ASC;
-'''
+"""
 
 """ GLOBAL VARIABLES """
 db = None
