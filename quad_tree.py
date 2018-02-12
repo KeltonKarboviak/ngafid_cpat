@@ -38,13 +38,13 @@ class QuadTree(object):
         return str(self)
 
     def _get_lat_direction(self, lat):
-        return ('south', (self._lat_min, self._lat_mid))
-            if lat < self._lat_mid
+        return ('south', (self._lat_min, self._lat_mid)) \
+            if lat < self._lat_mid \
             else ('north', (self._lat_mid, self._lat_max))
 
     def _get_lon_direction(self, lon):
-        return ('west', (self._lon_min, self._lon_mid))
-            if lon < self._lon_mid
+        return ('west', (self._lon_min, self._lon_mid)) \
+            if lon < self._lon_mid \
             else ('east', (self._lon_mid, self._lon_max))
 
     def insert(self, airport):

@@ -1,6 +1,7 @@
 import MySQLdb as mysql
 import pandas as pd
 import numpy as np
+from numpy import absolute
 from enum import Enum
 from geo_utils import (
     signed_heading_difference,
@@ -97,17 +98,16 @@ class FlightAnalyzer(object):
 
         # Get distance from airplane to closest airport at each point
         airports = df['airport'].values
-        airplane_data = df[['latitude', 'longitude', 'msl_altitude']].T.values
+        airplane_data = df[['latitude', 'longitude']].T.values
         airport_data = (
             [a.centerLatLon.lat for a in airports],
             [a.centerLatLon.lon for a in airports],
-            [a.alt for a in airports]
         )
-        df.loc[:, 'distance'] = vincenty_distance(*airplane_data, *airport_data)
+        df.loc[:, 'distance'] = vincenty_distance(*airplane_data, *airport_data) * 5280
 
         # Get AGL at each point
-        if 'derived_radio_altitude' not in df.columns:
-            df.loc[:, 'derived_radio_altitude'] = airplane_data[2] - airport_data[2]
+        if 'radio_altitude_derived' not in df.columns:
+            df.loc[:, 'radio_altitude_derived'] = airplane_data[2] - airport_data[2]
 
         return df
 
@@ -155,17 +155,17 @@ class FlightAnalyzer(object):
     def _findInitialTakeOff(self) -> int:
         # This will return the first index where the condition is True
         return (
-            self._flight_data['derived_radio_altitude'] >= APPROACH_MIN_ALTITUDE_AGL
+            self._flight_data['radio_altitude_derived'] >= APPROACH_MIN_ALTITUDE_AGL
         ).idxmax()
 
     def _analyze_approaches(self, idx_takeoff_end: int):
         try:
             # We'll loop until we go out of bounds on self._flight_data (see the
             # except block).
-            while True:
+            while idx_takeoff_end < len(self._flight_data.index) - 1:
                 mask_within_mile_below_500_ft = (
-                    (self._flight_data.loc[idx_takeoff_end+1:, 'distance'] < 5280) &
-                    (self._flight_data.loc[idx_takeoff_end+1:, 'derived_radio_altitude'] < APPROACH_MIN_ALTITUDE_AGL)
+                    (self._flight_data.loc[idx_takeoff_end:, 'distance'] < 5280) &
+                    (self._flight_data.loc[idx_takeoff_end:, 'radio_altitude_derived'] < APPROACH_MIN_ALTITUDE_AGL)
                 )
                 idx_approach_attempt = mask_within_mile_below_500_ft.idxmax()
 
@@ -173,12 +173,12 @@ class FlightAnalyzer(object):
 
                 print("Airplane is approaching %s, %s: %s" % (airport.city, airport.state, airport.code))
                 thisApproachID = self._getAndIncApproachID()
-                self.approaches[thisApproachID] = {}
+                self._approaches[thisApproachID] = {}
 
                 mask_not_between_150_500_ft_agl = ~self._flight_data.loc[
-                    idx_approach_attempt:, 'derived_radio_altitude'
+                    idx_approach_attempt:, 'radio_altitude_derived'
                 ].between(
-                    APPROACH_FINAL_MAX_ALTITUDE,
+                    APPROACH_FINAL_MAX_ALTITUDE_AGL,
                     APPROACH_MIN_ALTITUDE_AGL,
                     inclusive=False
                 )
@@ -191,9 +191,9 @@ class FlightAnalyzer(object):
 
                 mask_not_within_mile_between_50_150_ft = ~(
                     (self._flight_data.loc[idx_start:, 'distance'] < 5280) &
-                    (self._flight_data.loc[idx_start:, 'derived_radio_altitude'].between(
-                        APPROACH_FINAL_MIN_ALTITUDE,
-                        APPROACH_FINAL_MAX_ALTITUDE,
+                    (self._flight_data.loc[idx_start:, 'radio_altitude_derived'].between(
+                        APPROACH_FINAL_MIN_ALTITUDE_AGL,
+                        APPROACH_FINAL_MAX_ALTITUDE_AGL,
                         inclusive=True
                     ))
                 )
@@ -260,24 +260,25 @@ class FlightAnalyzer(object):
                     all_values[2] = approach_data_slice['indicated_airspeed'].values
                     all_values[3] = approach_data_slice['vertical_airspeed'].values
 
-                self.approaches[thisApproachID]['airport-code'] = airport.code
-                self.approaches[thisApproachID]['runway-code'] = None if runway is None else runway.runwayCode
-                self.approaches[thisApproachID]['approach-start'] = idx_start
-                self.approaches[thisApproachID]['approach-end'] = idx_end
-                self.approaches[thisApproachID]['unstable'] = airplane_is_unstable
-                self.approaches[thisApproachID]['F1'] = unstable_reasons[0]
-                self.approaches[thisApproachID]['F2'] = unstable_reasons[1]
-                self.approaches[thisApproachID]['A'] = unstable_reasons[2]
-                self.approaches[thisApproachID]['S'] = unstable_reasons[3]
-                self.approaches[thisApproachID]['HDG'] = all_values[0]
-                self.approaches[thisApproachID]['CTR'] = all_values[1]
-                self.approaches[thisApproachID]['IAS'] = all_values[2]
-                self.approaches[thisApproachID]['VSI'] = all_values[3]
+                self._approaches[thisApproachID]['airport-code'] = airport.code
+                self._approaches[thisApproachID]['runway-code'] = None if runway is None else runway.runwayCode
+                self._approaches[thisApproachID]['approach-start'] = idx_start
+                self._approaches[thisApproachID]['approach-end'] = idx_end
+                self._approaches[thisApproachID]['unstable'] = airplane_is_unstable
+                self._approaches[thisApproachID]['F1'] = unstable_reasons[0]
+                self._approaches[thisApproachID]['F2'] = unstable_reasons[1]
+                self._approaches[thisApproachID]['A'] = unstable_reasons[2]
+                self._approaches[thisApproachID]['S'] = unstable_reasons[3]
+                self._approaches[thisApproachID]['HDG'] = all_values[0]
+                self._approaches[thisApproachID]['CTR'] = all_values[1]
+                self._approaches[thisApproachID]['IAS'] = all_values[2]
+                self._approaches[thisApproachID]['VSI'] = all_values[3]
 
                 idx_takeoff_end = self._analyze_landing(idx_end, airport, thisApproachID)
         except (KeyError, IndexError) as e:
             # We went out of bounds on an index in self._flight_data, which means
             # we've gone through all the data. Thus, return out of function
+            print('Hit the except block!!!')
             return
 
 
@@ -307,8 +308,8 @@ class FlightAnalyzer(object):
     #             #     print "\tcompCourse 15 < x < 90: %f, time: %f" % (hdgDiff, self.flightData[i]['time'])
 
     #             thisApproachID = self._getAndIncApproachID()
-    #             self.approaches[thisApproachID] = {}
-    #             self.approaches[thisApproachID]['unstable'] = []
+    #             self._approaches[thisApproachID] = {}
+    #             self._approaches[thisApproachID]['unstable'] = []
 
     #             while hAGL > APPROACH_FINAL_MAX_ALTITUDE_AGL and hAGL < APPROACH_MIN_ALTITUDE_AGL and i < self.dataLength:
     #                 airplaneMSL = self.flightData[i]['msl_altitude']
@@ -365,7 +366,7 @@ class FlightAnalyzer(object):
     #                         unstableReasons[3].append(airplaneVSI)
     #                     temp_list.append(i)
     #                 elif len(temp_list) > 0:
-    #                     self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
+    #                     self._approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
     #                     del temp_list[:]
 
     #                 # Including the parameter values whether the approach is
@@ -387,31 +388,31 @@ class FlightAnalyzer(object):
     #             end = start if start == i - 1 else i - 1
 
     #             if len(temp_list) > 0:
-    #                 self.approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
+    #                 self._approaches[thisApproachID]['unstable'].append( (temp_list[0], temp_list[-1]) )
 
-    #             self.approaches[thisApproachID]['airport-code'] = airport.code
-    #             self.approaches[thisApproachID]['runway-code'] = None if runway is None else runway.runwayCode
-    #             self.approaches[thisApproachID]['approach-start'] = start
-    #             self.approaches[thisApproachID]['approach-end'] = end
-    #             self.approaches[thisApproachID]['F1'] = unstableReasons[0]
-    #             self.approaches[thisApproachID]['F2'] = unstableReasons[1]
-    #             self.approaches[thisApproachID]['A'] = unstableReasons[2]
-    #             self.approaches[thisApproachID]['S'] = unstableReasons[3]
-    #             self.approaches[thisApproachID]['HDG'] = allValues[0]
-    #             self.approaches[thisApproachID]['CTR'] = allValues[1]
-    #             self.approaches[thisApproachID]['IAS'] = allValues[2]
-    #             self.approaches[thisApproachID]['VSI'] = allValues[3]
+    #             self._approaches[thisApproachID]['airport-code'] = airport.code
+    #             self._approaches[thisApproachID]['runway-code'] = None if runway is None else runway.runwayCode
+    #             self._approaches[thisApproachID]['approach-start'] = start
+    #             self._approaches[thisApproachID]['approach-end'] = end
+    #             self._approaches[thisApproachID]['F1'] = unstableReasons[0]
+    #             self._approaches[thisApproachID]['F2'] = unstableReasons[1]
+    #             self._approaches[thisApproachID]['A'] = unstableReasons[2]
+    #             self._approaches[thisApproachID]['S'] = unstableReasons[3]
+    #             self._approaches[thisApproachID]['HDG'] = allValues[0]
+    #             self._approaches[thisApproachID]['CTR'] = allValues[1]
+    #             self._approaches[thisApproachID]['IAS'] = allValues[2]
+    #             self._approaches[thisApproachID]['VSI'] = allValues[3]
 
     #             i = self.analyzeLanding(end, airport, thisApproachID)
 
     #         i += 15
 
-    def _analyze_single_approach(self, data_slice, airport, runway):
+    def _analyze_single_approach(self, data_slice, airport, runway, approach_id):
         pass
 
     def _analyze_landing(self, idx_start, airport, approach_id):
         idx_end = (
-            self._flight_data.loc[idx_start:, 'derived_radio_altitude'] >= APPROACH_MIN_ALTITUDE_AGL
+            self._flight_data.loc[idx_start:, 'radio_altitude_derived'] >= APPROACH_MIN_ALTITUDE_AGL
         ).idxmax()
 
         # If idx_end == idx_start, that means the condition above was False for
@@ -419,7 +420,7 @@ class FlightAnalyzer(object):
         if idx_end == idx_start:
             idx_end = len(self._flight_data.index) - 1
 
-        landing_data_slice = self_flight_data.iloc[idx_start : idx_end+1]
+        landing_data_slice = self._flight_data.iloc[idx_start : idx_end+1]
 
         full_stop = (
             landing_data_slice['indicated_airspeed'] <= FULL_STOP_SPEED_INDICATOR
@@ -428,24 +429,24 @@ class FlightAnalyzer(object):
         AGL_WINDOW_SECONDS = 5
 
         agl_5_sec_windows = rolling_window(
-            landing_data_slice['derived_radio_altitude'], AGL_WINDOW_SECONDS
+            landing_data_slice['radio_altitude_derived'], AGL_WINDOW_SECONDS
         )
         touch_and_go = (
             np.average(agl_5_sec_windows, axis=1) < TOUCH_AND_GO_ELEVATION_INDICATOR
         ).any()
 
         if full_stop:
-            self.approaches[thisApproachID]['landing-type'] = LandingResult['STOP_AND_GO'].value
+            self._approaches[approach_id]['landing-type'] = LandingResult['STOP_AND_GO'].value
             print("Full Stop!!!!")
         elif touch_and_go:
-            self.approaches[thisApproachID]['landing-type'] = LandingResult['TOUCH_AND_GO'].value
+            self._approaches[approach_id]['landing-type'] = LandingResult['TOUCH_AND_GO'].value
             print("Touch and Go!!!!")
         else:
-            self.approaches[thisApproachID]['landing-type'] = LandingResult['GO_AROUND'].value
+            self._approaches[approach_id]['landing-type'] = LandingResult['GO_AROUND'].value
             print("Go Around?!?!?!")
 
-        self.approaches[approach_id]['landing-start'] = idx_start
-        self.approaches[approach_id]['landing-end'] = idx_end
+        self._approaches[approach_id]['landing-start'] = idx_start
+        self._approaches[approach_id]['landing-end'] = idx_end
         print("")
 
         return idx_end
@@ -488,17 +489,17 @@ class FlightAnalyzer(object):
     #     end = i
 
     #     if fullStop:
-    #         self.approaches[thisApproachID]['landing-type'] = 'stop-and-go'
+    #         self._approaches[thisApproachID]['landing-type'] = 'stop-and-go'
     #         print("Full Stop!!!!")
     #     elif touchAndGo:
-    #         self.approaches[thisApproachID]['landing-type'] = 'touch-and-go'
+    #         self._approaches[thisApproachID]['landing-type'] = 'touch-and-go'
     #         print("Touch and Go!!!!")
     #     else:
-    #         self.approaches[thisApproachID]['landing-type'] = 'go-around'
+    #         self._approaches[thisApproachID]['landing-type'] = 'go-around'
     #         print("Go Around?!?!?!")
 
-    #     self.approaches[thisApproachID]['landing-start'] = start
-    #     self.approaches[thisApproachID]['landing-end'] = end
+    #     self._approaches[thisApproachID]['landing-start'] = start
+    #     self._approaches[thisApproachID]['landing-end'] = end
     #     print("")
 
     #     return end
@@ -569,9 +570,9 @@ class FlightAnalyzer(object):
         @author: Kelton Karboviak
         '''
         values = []
-        for id, approach in self.approaches.items():
+        for id, approach in self._approaches.items():
             valuesTup = (
-                self.flightID,
+                self._flight_id,
                 id + 1,
                 approach['airport-code'],
                 approach['runway-code'],
@@ -580,7 +581,7 @@ class FlightAnalyzer(object):
                 approach['landing-start'],
                 approach['landing-end'],
                 approach['landing-type'],
-                int(approach['unstable'])),
+                int(approach['unstable']),
                 None if not len(approach['HDG']) else np.average(approach['HDG']),
                 None if not len(approach['F1']) else np.average(approach['F1']),
                 None if not len(approach['CTR']) else np.average(approach['CTR']),
@@ -594,15 +595,15 @@ class FlightAnalyzer(object):
 
         print('\n'.join(str(tup) for tup in values))
 
-        if self.skipOutputToDB:
+        if self._skip_output_to_db:
             return
 
         try:
             if len(values):  # Check to see if flight has any approaches to insert
-                self.cursor.executemany(INSERT_SQL, values)
-            self.cursor.execute(UPDATE_ANALYSES_SQL, (self.flightID,))
-            self.db.commit()
+                self._cursor.executemany(INSERT_SQL, values)
+            self._cursor.execute(UPDATE_ANALYSES_SQL, (self.flightID,))
+            self._db.commit()
         except mysql.Error as e:
             print("MySQL Error [%d]: %s\n" % (e.args[0], e.args[1]))
-            print("Last Executed Query: ", self.cursor._last_executed)
-            self.db.rollback()
+            print("Last Executed Query: ", self._cursor._last_executed)
+            self._db.rollback()
