@@ -48,10 +48,10 @@ class Vector3d(object):
          * @param   {number} [precision=5] - Number of decimal places to be used.
          * @returns {string} Vector represented as <x,y,z>.
         '''
-        return "<{0:5f}, {1:5f}, {2:5f}>".format(self.x, self.y, self.z)
+        return "<{self.x:5f}, {self.y:5f}, {self.z:5f}>".format(self=self)
 
     def __repr__(self):
-        return str(self)
+        return "<Vector3d(x={self.x:5f}, {self.y:5f}, {self.z:5f})>".format(self=self)
 
     def plus(self, v):
         '''

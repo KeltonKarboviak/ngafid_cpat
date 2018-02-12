@@ -44,10 +44,10 @@ class LatLon(object):
          *
          * @returns {string} LatLon represented as (lat, lon).
         '''
-        return "<LatLon(lat={self.lat:5f}, lon={self.lon:5f})".format(self=self)
+        return "({self.lat:5f}, {self.lon:5f})".format(self=self)
 
     def __repr__(self):
-        return str(self)
+        return "<LatLon(lat={self.lat:5f}, lon={self.lon:5f})".format(self=self)
 
     def toVector(self):
         '''
