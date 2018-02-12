@@ -7,9 +7,9 @@ class Runway(object):
         self.airportCode = airportCode
         self.alt = alt
         self.runwayCode = runwayCode
-        self.magHeading = magHdg
-        self.trueHeading = trueHdg
-        self.centerLatLon = LatLon(lat, lon)
+        self.magHeading = float(magHdg)
+        self.trueHeading = float(trueHdg)
+        self.centerLatLon = LatLon(float(lat), float(lon))
 
     def __str__(self):
         return (

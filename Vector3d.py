@@ -37,9 +37,9 @@ class Vector3d(object):
          * @param {number} y - Y component of vector.
          * @param {number} z - Z component of vector.
         '''
-        self.x = x
-        self.y = y
-        self.z = z
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
 
     def __str__(self):
         '''

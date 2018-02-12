@@ -9,7 +9,7 @@ class Airport(object):
         self.name = name
         self.city = city
         self.state = state
-        self.centerLatLon = LatLon(lat, lon)
+        self.centerLatLon = LatLon(float(lat), float(lon))
         self.alt = alt
         self.runways = []
 
