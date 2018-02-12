@@ -14,6 +14,7 @@ from Airport import Airport
 from FlightAnalysis import FlightAnalyzer
 from LatLon import LatLon
 from Runway import Runway
+from typing import Dict
 from quad_tree import QuadTree
 
 
@@ -31,6 +32,8 @@ db_creds = db_credentials[ENV]
 fetchFlightIDsSQL = "SELECT flight_id FROM flight_analyses WHERE approach_analysis = 0;"
 fetchAircraftTypeSQL = "SELECT aircraft_type FROM flight_id WHERE id = %s;"
 fetchFlightDataSQL = '''
+fetchAirportDataSQL = 'SELECT id, name, city, state_code, latitude, longitude, elevation FROM test_airports;'
+fetchRunwayDataSQL = 'SELECT airport_id, id, touchdown_lat, touchdown_lon, tdze, magnetic_course, true_course FROM test_runways;'
     SELECT
         time, msl_altitude, derived_radio_altitude, indicated_airspeed, vertical_airspeed, heading, latitude, longitude, pitch_attitude, eng_1_rpm
     FROM
@@ -68,26 +71,58 @@ def get_flight_data(flight_id: int) -> pd.DataFrame:
     return df
 
 
-def loadAirportData():
-    """
-    Populate a dictionary containing airport data for all airports throughout the U.S.
-    @author: Wyatt Hedrick
-    """
-    with open('data/Airports.csv', 'r') as infile:
-        infile.readline()  # Trash line of data headers
-        for line in infile:
-            row = line.split(',')
-            #             code,   name,   city,  state,      latitude,     longitude,      altitude
-            a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
-            airports[row[0]] = a  # Insert into airports dict with airportCode as key
+def load_airport_data() -> Dict[str, Airport]:
+    cursor.execute(fetchAirportDataSQL)
 
-    with open('data/AirportsDetailed.csv', 'r') as infile:
-        infile.readline()  # Trash line of data headers
-        for line in infile:
-            row = line.split(',')
-            #     airportCode,      altitude, runwayCode,      magHdg,        trueHdg,      centerLat,      centerLon
-            r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[12]), float(row[25]), float(row[26]))
-            airports[row[2]].addRunway(r)  # Add runway to corresponding airport
+    return {
+        airport['id']: Airport(
+            airport['id'],
+            airport['name'],
+            airport['city'],
+            airport['state_code'],
+            airport['latitude'],
+            airport['longitude'],
+            airport['elevation']
+        )
+        for airport in cursor.fetchall()
+    }
+
+def load_runway_data_into_airports():
+    global airports
+
+    cursor.execute(fetchRunwayDataSQL)
+
+    for runway in cursor.fetchall():
+        airports[runway['airport_id']].addRunway(Runway(
+            runway['airport_id'],
+            runway['tdze'],
+            runway['id'],
+            runway['magnetic_course'],
+            runway['true_course'],
+            runway['touchdown_lat'],
+            runway['touchdown_lon']
+        ))
+
+
+# def loadAirportData():
+#     """
+#     Populate a dictionary containing airport data for all airports throughout the U.S.
+#     @author: Wyatt Hedrick
+#     """
+#     with open('data/Airports.csv', 'r') as infile:
+#         infile.readline()  # Trash line of data headers
+#         for line in infile:
+#             row = line.split(',')
+#             #             code,   name,   city,  state,      latitude,     longitude,      altitude
+#             a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
+#             airports[row[0]] = a  # Insert into airports dict with airportCode as key
+#     with open('data/AirportsDetailed.csv', 'r') as infile:
+#         infile.readline()  # Trash line of data headers
+#         for line in infile:
+#             row = line.split(',')
+#             #     airportCode,      altitude, runwayCode,      magHdg,        trueHdg,      centerLat,      centerLon
+#             r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[12]), float(row[25]), float(row[26]))
+#             airports[row[2]].addRunway(r)  # Add runway to corresponding airport
 
 
 def main(flightIDs, runWithMultiProcess, skipOutputToDB):
@@ -101,8 +136,9 @@ def main(flightIDs, runWithMultiProcess, skipOutputToDB):
 
     logging.info('Number of Flights to Analyze: %4d', len(flightIDs))
 
-    with stopwatch('Loading airport data'):
-        loadAirportData()
+    with stopwatch('Loading Airport Data'):
+        airports = load_airport_data()
+        load_runway_data_into_airports()
 
     with stopwatch('Loading Quad Tree'):
         # Load Airports into a QuadTree
