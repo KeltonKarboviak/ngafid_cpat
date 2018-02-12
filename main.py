@@ -166,11 +166,33 @@ def stopwatch(msg):
 
 
 if __name__ == '__main__':
+    # Parse command-line args
+    parser = argparse.ArgumentParser(description='Tool to detect approaches in flight data.')
+    parser.add_argument(
+        'flight_ids',
+        metavar='flight_id',
+        type=str,
+        nargs='*',
+        help='a Flight ID to be analyzed'
+    )
+    parser.add_argument(
+        '-m', '--multi-process',
+        action='store_true',
+        help='run program with multiple processes'
+    )
+    parser.add_argument(
+        '--no-write',
+        action='store_true',
+        help='program will not save results to DB'
+    )
+    args = parser.parse_args()
+
     try:
         db = mysql.connect(**db_creds)
         cursor = db.cursor(mysql.cursors.DictCursor)
 
-        main()
+        with stopwatch('Program Execution'):
+            main(args.flight_ids, args.multi_process, args.no_write)
     except mysql.Error as e:
         print(e)
     finally:
