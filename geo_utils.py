@@ -27,25 +27,28 @@ def signed_heading_difference(initial, final):
     going around a compass clockwise, the result will be positive. Otherwise,
     the result will be negative.
     """
-    if initial > 360 or initial < 0 or final > 360 or final < 0:
+    if np.array(
+        (initial > 360) | (initial < 0) | (final > 360) | (final < 0)
+    ).any():
         raise ValueError('Inputs need to be within the following range: [0, 360]')
 
     diff = final - initial
-    abs_diff = abs(diff)
+    abs_diff = absolute(diff)
 
-    if abs_diff <= 180:
-        return abs_diff if abs_diff == 180 else diff
-    elif final > initial:
-        return abs_diff - 360
-    else:
-        return 360 - abs_diff
+    return np.where(
+        abs_diff <= 180,
+        np.where(abs_diff == 180, abs_diff, diff),
+        np.where(final > initial, abs_diff - 360, 360 - abs_diff)
+    )
 
 
 def unsigned_heading_difference(initial, final):
     """Calculate the error from a given initial heading to a final heading. The
     result will be the absolute value of the error.
     """
-    if initial > 360 or initial < 0 or final > 360 or final < 0:
+    if np.array(
+        (initial > 360) | (initial < 0) | (final > 360) | (final < 0)
+    ).any():
         raise ValueError('Inputs need to be within the following range: [0, 360]')
 
     return 180 - abs(abs(initial - final) - 180)
