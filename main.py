@@ -20,7 +20,7 @@ from quad_tree import QuadTree
 
 """ LOGGING SETUP """
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(process)d - %(message)s")
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__file__)
 
 """ IMPORT ENVIRONMENT-SPECIFIC CONFIGS """
 ENV = "dev"
@@ -51,14 +51,13 @@ airports = {}
 quad_tree = None
 NUM_CPUS = multiprocessing.cpu_count()  # Set number of CPUs to use for multiprocessing
 
+vector_create_latlons = np.vectorize(lambda lat, lon: LatLon(lat, lon))
+
 
 def get_aircraft_type(flight_id: int) -> int:
     cursor.execute(fetchAircraftTypeSQL, (flight_id,))
 
     return cursor.fetchone()['aircraft_type']
-
-
-vector_create_latlons = np.vectorize(lambda lat, lon: LatLon(lat, lon))
 
 
 def get_flight_data(flight_id: int) -> pd.DataFrame:
@@ -126,6 +125,8 @@ def load_runway_data_into_airports():
 
 
 def main(flightIDs, runWithMultiProcess, skipOutputToDB):
+    global db, cursor, airports, quad_tree, anaylzer
+
     # If there are no flight_ids passed as command-line args,
     # fetch all flights that haven't been analyzed for approaches yet
     # Otherwise the ids passed into argv will only be analyzed
@@ -134,7 +135,7 @@ def main(flightIDs, runWithMultiProcess, skipOutputToDB):
         flights = globalCursor.fetchall()
         flightIDs = [flight['flight_id'] for flight in flights]
 
-    logging.info('Number of Flights to Analyze: %4d', len(flightIDs))
+    logger.info('Number of Flights to Analyze: %4d', len(flightIDs))
 
     with stopwatch('Loading Airport Data'):
         airports = load_airport_data()
@@ -146,11 +147,24 @@ def main(flightIDs, runWithMultiProcess, skipOutputToDB):
         for k, v in airports.items():
             quad_tree.insert(v)
 
-    flight_id = flightIDs[0]
+    analyzer = FlightAnalyzer(db, quad_tree, skipOutputToDB)
 
-    aircraft_type_id = get_aircraft_type(flight_id)
+    for flight_id in flightIDs:
+        logger.info('Processing Starting for Flight ID [%s]', flight_id)
+        try:
+            aircraft_type_id = get_aircraft_type(flight_id)
+            flight_data = get_flight_data(flight_id)
 
-    flight_data = get_flight_data(flight_id)
+            analyzer.analyze(flight_id, aircraft_type_id, flight_data)
+        except mysql.Error as e:
+            logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
+            logger.exception('Last Executed Query: %s', cursor._last_executed)
+        except pd.io.sql.DatabaseError as e:
+            logger.exception('Pandas Error: %s', e)
+
+        logger.info('Processing Complete for Flight ID [%s]', flight_id)
+
+        break  # Temporary so that only one flight is processed
 
 
 @contextlib.contextmanager
@@ -194,7 +208,7 @@ if __name__ == '__main__':
         with stopwatch('Program Execution'):
             main(args.flight_ids, args.multi_process, args.no_write)
     except mysql.Error as e:
-        print(e)
+        logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
     finally:
         if cursor is not None:
             cursor.close()
