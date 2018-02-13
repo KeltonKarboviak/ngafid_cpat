@@ -7,7 +7,7 @@
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  #
 
 import math
-from Vector3d import Vector3d
+from vector3d import Vector3d
 
 
 class LatLon(object):
