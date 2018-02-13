@@ -206,30 +206,3 @@ def cross_track_distance_from_point_to_path(
             bearing_from_start_to_point - bearing_from_start_to_end
         )
     ) * radius
-
-
-# def vincenty_distance(lats_from, lons_from, alts_from, lats_to, lons_to, alts_to):
-#     lats_mid = (lats_from + lats_to) / 2.0
-#     alts_mid = ((alts_from + alts_to) / 2.0) / MILES_TO_FEET
-#     earth_radii = earth_radius(lats_mid, alts_mid) + alts_mid
-
-#     lats_to_in_radians = np.radians(lats_to)
-#     lats_from_in_radians = np.radians(lats_from)
-#     lons_diff_in_radians = np.radians(lons_to - lons_from)
-
-#     return MILES_TO_FEET * np.arctan2(
-#         np.sqrt(
-#             (np.cos(lats_to_in_radians) * np.sin(lons_diff_in_radians))**2 +
-#             (np.cos(lats_from_in_radians) * np.sin(lats_to_in_radians) - (np.sin(lats_from_in_radians) * np.cos(lats_to_in_radians) * np.cos(lons_diff_in_radians)))**2
-#         ),
-#         np.sin(lats_from_in_radians) * np.sin(lats_to_in_radians) + np.cos(lats_from_in_radians) * np.cos(lats_to_in_radians) * np.cos(lons_diff_in_radians)
-#     ) * earth_radii
-
-
-# def earth_radius(lats, alts):
-#     lats_in_radians = np.radians(lats)
-
-#     return np.sqrt(
-#         ((EQUATOR_RADIUS_MILES**2 * np.cos(lats_in_radians))**2 + (POLAR_RADIUS_MILES**2 * np.sin(lats_in_radians))**2) /
-#         ((EQUATOR_RADIUS_MILES * np.cos(lats_in_radians))**2 + (POLAR_RADIUS_MILES * np.sin(lats_in_radians))**2)
-#     )

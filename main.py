@@ -123,27 +123,6 @@ def load_runway_data_into_airports():
         ))
 
 
-# def loadAirportData():
-#     """
-#     Populate a dictionary containing airport data for all airports throughout the U.S.
-#     @author: Wyatt Hedrick
-#     """
-#     with open('data/Airports.csv', 'r') as infile:
-#         infile.readline()  # Trash line of data headers
-#         for line in infile:
-#             row = line.split(',')
-#             #             code,   name,   city,  state,      latitude,     longitude,      altitude
-#             a = Airport(row[0], row[1], row[2], row[3], float(row[4]), float(row[5]), float(row[6]))
-#             airports[row[0]] = a  # Insert into airports dict with airportCode as key
-#     with open('data/AirportsDetailed.csv', 'r') as infile:
-#         infile.readline()  # Trash line of data headers
-#         for line in infile:
-#             row = line.split(',')
-#             #     airportCode,      altitude, runwayCode,      magHdg,        trueHdg,      centerLat,      centerLon
-#             r = Runway(row[2], float(row[6]), row[10], float(row[11]), float(row[12]), float(row[25]), float(row[26]))
-#             airports[row[2]].addRunway(r)  # Add runway to corresponding airport
-
-
 def main(flight_ids, run_multi_process, skip_output):
     global db, cursor, airports, quad_tree, analyzer
 
