@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 
-import MySQLdb as mysql
-import pandas as pd
-import numpy as np
-from numpy import absolute
 from enum import Enum
+
+import MySQLdb as mysql
+import numpy as np
+import pandas as pd
+from numpy import absolute
+
 from geoutils import (
     signed_heading_difference,
-    unsigned_heading_difference,
     vincenty_distance,
-    cross_track_distance_from_point_to_path,
 )
 from quad_tree import QuadTree
 
@@ -55,6 +55,7 @@ LandingResult = Enum('LandingResult', {
 def rolling_window(a, window):
     shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
     strides = a.strides + (a.strides[-1],)
+
     return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
 
 
@@ -94,13 +95,13 @@ class FlightAnalyzer(object):
 
     def _derive_necessary_data(self, df: pd.DataFrame) -> pd.DataFrame:
         # Get airport that is closest to each point
+        airplane_data = df[['latitude', 'longitude']].T.values
         df.loc[:, 'airport'] = self.vector_get_nearest_airports(
-            *df[['latitude', 'longitude']].T.values
+            *airplane_data
         )
 
         # Get distance from airplane to closest airport at each point
         airports = df['airport'].values
-        airplane_data = df[['latitude', 'longitude']].T.values
         airport_data = (
             [a.centerLatLon.lat for a in airports],
             [a.centerLatLon.lon for a in airports],
