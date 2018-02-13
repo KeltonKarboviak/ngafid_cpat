@@ -1,9 +1,11 @@
+# -*- coding: utf-8 -*-
+
 import MySQLdb as mysql
 import pandas as pd
 import numpy as np
 from numpy import absolute
 from enum import Enum
-from geo_utils import (
+from geoutils import (
     signed_heading_difference,
     unsigned_heading_difference,
     vincenty_distance,

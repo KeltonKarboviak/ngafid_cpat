@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
+
 from math import pi
+
 import numpy as np
 from numpy import (
     absolute,
@@ -12,6 +15,7 @@ from numpy import (
     sqrt,
     tan,
 )
+
 
 EQUATOR_RADIUS_MILES = 3963.1906
 POLAR_RADIUS_MILES = 3949.90276423

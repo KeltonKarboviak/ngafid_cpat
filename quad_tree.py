@@ -1,7 +1,8 @@
-#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
-from Airport import NullAirport
 from math import fabs
+
+from airport import NullAirport
 
 
 class QuadTree(object):

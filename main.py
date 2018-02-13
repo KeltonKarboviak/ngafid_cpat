@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 from __future__ import print_function
+
 import argparse
 import contextlib
 import logging
 import multiprocessing
-import MySQLdb as mysql
 import time
-import pandas as pd
-import numpy as np
-from config import db_credentials
-from Airport import Airport
-from flight_analyzer import FlightAnalyzer
-from LatLon import LatLon
-from Runway import Runway
 from typing import Dict
+
+import MySQLdb as mysql
+import numpy as np
+import pandas as pd
+
+from airport import Airport
+from latlon import LatLon
+from runway import Runway
+from config import db_credentials
+from flight_analyzer import FlightAnalyzer
 from quad_tree import QuadTree
 
 

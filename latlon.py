@@ -1,4 +1,5 @@
-# coding: utf-8
+# -*- coding: utf-8 -*-
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  #
 #  Vector-based spherical geodetic (latitude/longitude) functions    (c) Chris Veness 2011-2016  #
 #                                                                                   MIT Licence  #
@@ -7,6 +8,7 @@
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  #
 
 import math
+
 from vector3d import Vector3d
 
 

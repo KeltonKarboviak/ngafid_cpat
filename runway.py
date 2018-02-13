@@ -1,4 +1,6 @@
-from LatLon import LatLon
+# -*- coding: utf-8 -*-
+
+from latlon import LatLon
 
 
 class Runway(object):

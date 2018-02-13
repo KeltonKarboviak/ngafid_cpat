@@ -1,4 +1,5 @@
-#coding: utf-8
+# -*- coding: utf-8 -*-
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  #
 # Vector handling functions                                          (c) Chris Veness 2011-2016  #
 #                                                                                   MIT Licence  #

@@ -1,5 +1,8 @@
-from LatLon import LatLon
+# -*- coding: utf-8 -*-
+
 from numpy import nan
+
+from latlon import LatLon
 
 
 class Airport(object):
