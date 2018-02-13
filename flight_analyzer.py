@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from enum import Enum
+from typing import Tuple, Dict
 
 import MySQLdb as mysql
 import numpy as np
@@ -66,13 +67,21 @@ class FlightAnalyzer(object):
         self._cursor = db.cursor(mysql.cursors.DictCursor)
         self._quad_tree = quad_tree
         self._skip_output_to_db = skip_output
+
+        self._takeoffs = {}
         self._approaches = {}
         self._approach_id = 0
 
         self.vector_get_nearest_airports = np.vectorize(self._quad_tree.get_nearest_airport)
         self.vector_cross_track_distance = np.vectorize(self._crossTrackToCenterLine)
 
-    def analyze(self, flight_id: int, aircraft_type_id: int, data: pd.DataFrame, skip_analysis: bool = False) -> dict:
+    def analyze(
+        self,
+        flight_id: int,
+        aircraft_type_id: int,
+        data: pd.DataFrame,
+        skip_analysis: bool = False
+    ) -> Tuple[Dict[int, dict], Dict[int, dict]]:
         self._flight_id = flight_id
 
         self._flight_data = self._derive_necessary_data(data)
@@ -91,7 +100,7 @@ class FlightAnalyzer(object):
         self._resetApproachID()
 
         # Return the dict of approaches
-        return self._approaches
+        return (self._takeoffs, self._approaches)
 
     def _derive_necessary_data(self, df: pd.DataFrame) -> pd.DataFrame:
         # Get airport that is closest to each point
