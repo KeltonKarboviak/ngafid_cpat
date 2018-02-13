@@ -144,18 +144,18 @@ def load_runway_data_into_airports():
 #             airports[row[2]].addRunway(r)  # Add runway to corresponding airport
 
 
-def main(flightIDs, runWithMultiProcess, skipOutputToDB):
-    global db, cursor, airports, quad_tree, anaylzer
+def main(flight_ids, run_multi_process, skip_output):
+    global db, cursor, airports, quad_tree, analyzer
 
     # If there are no flight_ids passed as command-line args,
     # fetch all flights that haven't been analyzed for approaches yet
     # Otherwise the ids passed into argv will only be analyzed
-    if len(flightIDs) == 0:
-        globalCursor.execute(fetchFlightIDsSQL)
-        flights = globalCursor.fetchall()
-        flightIDs = [flight['flight_id'] for flight in flights]
+    if len(flight_ids) == 0:
+        cursor.execute(fetchFlightIDsSQL)
+        flights = cursor.fetchall()
+        flight_ids = [flight['flight_id'] for flight in flights]
 
-    logger.info('Number of Flights to Analyze: %4d', len(flightIDs))
+    logger.info('Number of Flights to Analyze: %4d', len(flight_ids))
 
     with stopwatch('Loading Airport Data'):
         airports = load_airport_data()
@@ -167,9 +167,9 @@ def main(flightIDs, runWithMultiProcess, skipOutputToDB):
         for k, v in airports.items():
             quad_tree.insert(v)
 
-    analyzer = FlightAnalyzer(db, quad_tree, skipOutputToDB)
+    analyzer = FlightAnalyzer(db, quad_tree, skip_output)
 
-    for flight_id in flightIDs:
+    for flight_id in flight_ids:
         logger.info('Processing Starting for Flight ID [%s]', flight_id)
         try:
             aircraft_type_id = get_aircraft_type(flight_id)
