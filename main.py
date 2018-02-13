@@ -23,7 +23,10 @@ from quad_tree import QuadTree
 
 
 """ LOGGING SETUP """
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(process)d - %(message)s")
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(process)d - %(message)s"
+)
 logger = logging.getLogger(__file__)
 
 """ IMPORT ENVIRONMENT-SPECIFIC CONFIGS """
@@ -31,15 +34,25 @@ ENV = "dev"
 db_creds = db_credentials[ENV]
 
 """ SQL STATEMENTS """
-# fetchAirportDataSQL = "SELECT AirportCode, AirportName, City, StateCode, Latitude, Longitude, Elevation FROM dev_fdm_test.airports;"
-# fetchRunwayDataSQL = "SELECT AirportCode, Runway, tdze, magRunwayCourse, trueRunwayCourse, touchdownLat, touchdownLong FROM dev_fdm_test.airports_runways;"
-fetchAirportDataSQL = 'SELECT id, name, city, state_code, latitude, longitude, elevation FROM test_airports;'
-fetchRunwayDataSQL = 'SELECT airport_id, id, touchdown_lat, touchdown_lon, tdze, magnetic_course, true_course FROM test_runways;'
-fetchFlightIDsSQL = 'SELECT flight_id FROM flight_analyses WHERE approach_analysis = 0;'
+fetchAirportDataSQL = """\
+    SELECT id, name, city, state_code, latitude, longitude, elevation
+    FROM test_airports;
+"""
+fetchRunwayDataSQL = """\
+    SELECT
+        airport_id, id, touchdown_lat, touchdown_lon, tdze, magnetic_course,
+        true_course
+    FROM test_runways;
+"""
+fetchFlightIDsSQL = """\
+    SELECT flight_id FROM flight_analyses WHERE approach_analysis = 0;
+"""
 fetchAircraftTypeSQL = 'SELECT aircraft_type FROM flight_id WHERE id = %s;'
 fetchFlightDataSQL = """
     SELECT
-        time, msl_altitude, radio_altitude_derived, indicated_airspeed, vertical_airspeed, heading, latitude, longitude, pitch_attitude, eng_1_rpm
+        time, msl_altitude, radio_altitude_derived, indicated_airspeed,
+        vertical_airspeed, heading, latitude, longitude, pitch_attitude,
+        eng_1_rpm
     FROM
         main
     WHERE
@@ -53,7 +66,7 @@ cursor = None
 analyzer = None
 airports = {}
 quad_tree = None
-NUM_CPUS = multiprocessing.cpu_count()  # Set number of CPUs to use for multiprocessing
+NUM_CPUS = multiprocessing.cpu_count()
 
 vector_create_latlons = np.vectorize(lambda lat, lon: LatLon(lat, lon))
 
@@ -69,7 +82,9 @@ def get_flight_data(flight_id: int) -> pd.DataFrame:
 
     # Create LatLon objects by grabbing the lat,lon columns, transpose so
     # lat,lon becomes the rows, then unpack the numpy values array
-    df.loc[:, 'LatLon'] = vector_create_latlons(*df[['latitude', 'longitude']].T.values)
+    df.loc[:, 'LatLon'] = vector_create_latlons(
+        *df[['latitude', 'longitude']].T.values
+    )
 
     return df
 
@@ -89,6 +104,7 @@ def load_airport_data() -> Dict[str, Airport]:
         )
         for airport in cursor.fetchall()
     }
+
 
 def load_runway_data_into_airports():
     global airports
@@ -185,7 +201,9 @@ def stopwatch(msg):
 
 if __name__ == '__main__':
     # Parse command-line args
-    parser = argparse.ArgumentParser(description='Tool to detect approaches in flight data.')
+    parser = argparse.ArgumentParser(
+        description='Tool to detect approaches in flight data.'
+    )
     parser.add_argument(
         'flight_ids',
         metavar='flight_id',

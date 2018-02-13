@@ -34,7 +34,9 @@ def signed_heading_difference(initial, final):
     if np.array(
         (initial > 360) | (initial < 0) | (final > 360) | (final < 0)
     ).any():
-        raise ValueError('Inputs need to be within the following range: [0, 360]')
+        raise ValueError(
+            'Inputs need to be within the following range: [0, 360]'
+        )
 
     diff = final - initial
     abs_diff = absolute(diff)
@@ -53,7 +55,9 @@ def unsigned_heading_difference(initial, final):
     if np.array(
         (initial > 360) | (initial < 0) | (final > 360) | (final < 0)
     ).any():
-        raise ValueError('Inputs need to be within the following range: [0, 360]')
+        raise ValueError(
+            'Inputs need to be within the following range: [0, 360]'
+        )
 
     return 180 - abs(abs(initial - final) - 180)
 
@@ -77,12 +81,18 @@ def vincenty_distance(lats1, lons1, lats2, lons2):
     sin_reduceds2, cos_reduceds2 = sin(reduced_lats2), cos(reduced_lats2)
 
     lambda_lons = delta_lons
-    lambda_primes = np.full_like(lambda_lons, fill_value=2 * pi, dtype='float64')
+    lambda_primes = np.full_like(
+        lambda_lons, fill_value=2 * pi, dtype='float64'
+    )
 
     iter_limit = 1000
 
     i = 0
-    while (absolute(lambda_lons - lambda_primes) > 10e-12).any() and i <= iter_limit:
+    while (
+        (absolute(lambda_lons - lambda_primes) > 10e-12).any()
+        and i <= iter_limit
+    ):
+
         i += 1
 
         sin_lambda_lons, cos_lambda_lons = sin(lambda_lons), cos(lambda_lons)
@@ -117,12 +127,10 @@ def vincenty_distance(lats1, lons1, lats2, lons2):
         C = f / 16. * cos_sq_alphas * (4 + f * (4 - 3 * cos_sq_alphas))
 
         lambda_primes = lambda_lons
-        lambda_lons = (
-            delta_lons + (1 - C) * f * sin_alphas * (
-                sigmas + C * sin_sigmas * (
-                    cos2_sigma_ms + C * cos_sigmas * (
-                        -1 + 2 * cos2_sigma_ms ** 2
-                    )
+        lambda_lons = delta_lons + (1 - C) * f * sin_alphas * (
+            sigmas + C * sin_sigmas * (
+                cos2_sigma_ms + C * cos_sigmas * (
+                    -1 + 2 * cos2_sigma_ms ** 2
                 )
             )
         )
