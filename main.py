@@ -112,7 +112,7 @@ def load_runway_data_into_airports():
     cursor.execute(fetchRunwayDataSQL)
 
     for runway in cursor.fetchall():
-        airports[runway['airport_id']].addRunway(Runway(
+        airports[runway['airport_id']].add_runway(Runway(
             runway['airport_id'],
             runway['tdze'],
             runway['id'],

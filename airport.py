@@ -7,7 +7,16 @@ from latlon import LatLon
 
 class Airport(object):
 
-    def __init__(self, code, name, city, state, lat, lon, alt):
+    def __init__(
+        self,
+        code: str,
+        name: str,
+        city: str,
+        state: str,
+        lat: float,
+        lon: float,
+        alt: float
+    ):
         self.code = code
         self.name = name
         self.city = city
@@ -16,7 +25,7 @@ class Airport(object):
         self.alt = alt
         self.runways = []
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
             '<Airport(code="{self.code}", name="{self.name}", '
             'city="{self.name}", state="{self.state}", '
@@ -28,7 +37,7 @@ class Airport(object):
     def __repr__(self):
         return str(self)
 
-    def addRunway(self, runway):
+    def add_runway(self, runway):
         self.runways.append(runway)
 
 
