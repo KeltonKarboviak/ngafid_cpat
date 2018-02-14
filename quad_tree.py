@@ -3,7 +3,7 @@
 from math import fabs
 from typing import Tuple
 
-from airport import NullAirport, Airport
+from airport import Airport, NullAirport
 
 
 class QuadTree(object):

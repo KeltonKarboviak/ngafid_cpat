@@ -15,11 +15,11 @@ import numpy as np
 import pandas as pd
 
 from airport import Airport
-from latlon import LatLon
-from runway import Runway
 from config import db_credentials
 from flight_analyzer import FlightAnalyzer
+from latlon import LatLon
 from quad_tree import QuadTree
+from runway import Runway
 
 
 """ LOGGING SETUP """
