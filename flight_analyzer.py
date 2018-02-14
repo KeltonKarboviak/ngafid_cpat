@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from numpy import absolute
 
+from airport import Airport
 from geoutils import (
     signed_heading_difference,
     unsigned_heading_difference,
@@ -362,14 +363,14 @@ class FlightAnalyzer(object):
 
     def _analyze_single_approach(
         self,
-        data_slice,
-        airport,
-        runway,
-        approach_id
+        data_slice: pd.DataFrame,
+        airport: Airport,
+        runway: Runway,
+        approach_id: int
     ):
         pass
 
-    def _analyze_landing(self, idx_start, approach_id):
+    def _analyze_landing(self, idx_start: int, approach_id: int) -> int:
         idx_end = (
             self._flight_data.loc[idx_start:, 'radio_altitude_derived']
             >= APPROACH_MIN_ALTITUDE_AGL
@@ -420,7 +421,11 @@ class FlightAnalyzer(object):
         )
 
     @staticmethod
-    def _detect_runway(airplane_point, airplane_hdg, airport):
+    def _detect_runway(
+        airplane_point: LatLon,
+        airplane_hdg: float,
+        airport: Airport
+    ) -> Runway:
         our_runway = None
         closest_difference = 0
         for runway in airport.runways:
