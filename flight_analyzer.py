@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from enum import Enum
-from typing import Tuple, Dict
+from typing import Dict, Tuple
 
 import MySQLdb as mysql
 import numpy as np
@@ -10,10 +10,12 @@ from numpy import absolute
 
 from geoutils import (
     signed_heading_difference,
-    vincenty_distance,
     unsigned_heading_difference,
+    vincenty_distance,
 )
+from latlon import LatLon
 from quad_tree import QuadTree
+from runway import Runway
 
 
 ''' GLOBAL EXCEEDANCE THRESHOLDS '''
@@ -93,7 +95,7 @@ class FlightAnalyzer(object):
             self._quad_tree.get_nearest_airport
         )
         self.vector_cross_track_distance = np.vectorize(
-            self._crossTrackToCenterLine
+            self._cross_track_to_center_line
         )
 
     def analyze(
@@ -409,6 +411,15 @@ class FlightAnalyzer(object):
         print('')
 
         return idx_end
+
+    @staticmethod
+    def _cross_track_to_center_line(
+        airplane_point: LatLon,
+        runway: Runway
+    ) -> float:
+        return airplane_point.cross_track_distance_to(
+            runway.centerLatLon, runway.trueHeading, EARTH_RADIUS_FEET
+        )
 
     @staticmethod
     def _detect_runway(airplane_point, airplane_hdg, airport):
