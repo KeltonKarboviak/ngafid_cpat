@@ -1,16 +1,31 @@
 # -*- coding: utf-8 -*-
 
 from math import fabs
+from typing import Tuple
 
-from airport import NullAirport
+from airport import NullAirport, Airport
 
 
 class QuadTree(object):
     MIN_GRID_SIZE = 0.09
 
-    def __init__(self, lat_min=-180, lat_max=180, lon_min=-180, lon_max=180):
-        self._lat_min, self._lat_mid, self._lat_max = lat_min, (lat_min + lat_max) / 2.0, lat_max
-        self._lon_min, self._lon_mid, self._lon_max = lon_min, (lon_min + lon_max) / 2.0, lon_max
+    def __init__(
+        self,
+        lat_min: float = -180,
+        lat_max: float = 180,
+        lon_min: float = -180,
+        lon_max: float = 180
+    ):
+        self._lat_min, self._lat_mid, self._lat_max = (
+            lat_min,
+            (lat_min + lat_max) / 2.0,
+            lat_max
+        )
+        self._lon_min, self._lon_mid, self._lon_max = (
+            lon_min,
+            (lon_min + lon_max) / 2.0,
+            lon_max
+        )
 
         self._nodes = {
             'northwest': None,
@@ -24,31 +39,32 @@ class QuadTree(object):
         lat_diff = fabs(lat_min - lat_max)
         lon_diff = fabs(lon_min - lon_max)
 
-        if fabs(lat_min - lat_max) < self.MIN_GRID_SIZE and fabs(lon_min - lon_max) < self.MIN_GRID_SIZE:
-            self._is_leaf = True
-        else:
-            self._is_leaf = False
+        self._is_leaf = (
+            lat_diff < self.MIN_GRID_SIZE and lon_diff < self.MIN_GRID_SIZE
+        )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
-            '<QuadTree(lat_min={self._lat_min}, lat_mid={self._lat_mid}, lat_max={self._lat_max}, '
-            'lon_min={self._lon_min}, lon_mid={self._lon_mid}, lon_max={self._lon_max}, leaf={self._is_leaf})>'.format(self=self)
+            '<QuadTree(lat_min={self._lat_min}, lat_mid={self._lat_mid}, '
+            'lat_max={self._lat_max}, lon_min={self._lon_min}, '
+            'lon_mid={self._lon_mid}, lon_max={self._lon_max}, '
+            'leaf={self._is_leaf})>'.format(self=self)
         )
 
     def __repr__(self):
         return str(self)
 
-    def _get_lat_direction(self, lat):
+    def _get_lat_direction(self, lat: float) -> Tuple[str, Tuple[float, float]]:
         return ('south', (self._lat_min, self._lat_mid)) \
             if lat < self._lat_mid \
             else ('north', (self._lat_mid, self._lat_max))
 
-    def _get_lon_direction(self, lon):
+    def _get_lon_direction(self, lon: float) -> Tuple[str, Tuple[float, float]]:
         return ('west', (self._lon_min, self._lon_mid)) \
             if lon < self._lon_mid \
             else ('east', (self._lon_mid, self._lon_max))
 
-    def insert(self, airport):
+    def insert(self, airport: Airport):
         if self._is_leaf:
             self._airport = airport
         else:
@@ -63,7 +79,7 @@ class QuadTree(object):
 
             self._nodes[direction].insert(airport)
 
-    def get_nearest_airport(self, lat, lon):
+    def get_nearest_airport(self, lat: float, lon: float) -> Airport:
         if self._is_leaf:
             return self._airport
 
