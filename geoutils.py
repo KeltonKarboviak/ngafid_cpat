@@ -99,8 +99,8 @@ def vincenty_distance(lats1, lons1, lats2, lons2):
 
         sin_sigmas = sqrt(
             (cos_reduceds2 * sin_lambda_lons) ** 2 +
-            (cos_reduceds1 * sin_reduceds2 -
-                sin_reduceds1 * cos_reduceds2 * cos_lambda_lons) ** 2
+            (cos_reduceds1 * sin_reduceds2
+             - sin_reduceds1 * cos_reduceds2 * cos_lambda_lons) ** 2
         )
 
         # if sin_sigmas == 0:
@@ -146,16 +146,14 @@ def vincenty_distance(lats1, lons1, lats2, lons2):
 
     B = us_sq / 1024. * (256 + us_sq * (-128 + us_sq * (74 - 47 * us_sq)))
 
-    delta_sigmas = (
-        B * sin_sigmas * (
-            cos2_sigma_ms + B / 4. * (
-                cos_sigmas * (
-                    -1 + 2 * cos2_sigma_ms ** 2
-                ) - B / 6. * cos2_sigma_ms * (
-                    -3 + 4 * sin_sigmas ** 2
-                ) * (
-                    -3 + 4 * cos2_sigma_ms ** 2
-                )
+    delta_sigmas = B * sin_sigmas * (
+        cos2_sigma_ms + B / 4. * (
+            cos_sigmas * (
+                -1 + 2 * cos2_sigma_ms ** 2
+            ) - B / 6. * cos2_sigma_ms * (
+                -3 + 4 * sin_sigmas ** 2
+            ) * (
+                -3 + 4 * cos2_sigma_ms ** 2
             )
         )
     )
@@ -173,7 +171,7 @@ def bearing(start_lat, start_lon, end_lat, end_lon):
     phi_1, phi_2 = radians(start_lat), radians(end_lat)
     delta_lambda = radians(end_lon - start_lon)
     y = sin(delta_lambda) * cos(phi_2)
-    x = cos(phi_1)*sin(phi_2) - sin(phi_1)*cos(phi_2)*cos(delta_lambda)
+    x = cos(phi_1) * sin(phi_2) - sin(phi_1) * cos(phi_2) * cos(delta_lambda)
     theta = atan2(y, x)
 
     return (degrees(theta) + 360) % 360
