@@ -215,8 +215,8 @@ class FlightAnalyzer(object):
                     )
                 )
 
-                this_approach_id = self._get_and_increment_approach_id()
-                self._approaches[this_approach_id] = {}
+                approach_id = self._get_and_increment_approach_id()
+                self._approaches[approach_id] = {}
 
                 mask_not_between_150_500_ft_agl = ~self._flight_data.loc[
                     idx_approach_attempt:, 'radio_altitude_derived'
@@ -231,7 +231,7 @@ class FlightAnalyzer(object):
                     *self._flight_data.loc[
                         idx_start, ['LatLon', 'heading']
                     ].values,
-                    airport
+                    airport=airport
                 )
 
                 mask_not_within_mile_between_50_150_ft = ~(
@@ -253,7 +253,7 @@ class FlightAnalyzer(object):
                 ]
 
                 self._analyze_single_approach(
-                    approach_data_slice, airport, runway, this_approach_id
+                    approach_data_slice, airport, runway, approach_id
                 )
 
                 # Perform parameter analyses
@@ -332,28 +332,26 @@ class FlightAnalyzer(object):
                         approach_data_slice['vertical_airspeed'].values
                     )
 
-                self._approaches[this_approach_id]['airport-code'] = (
-                    airport.code
-                )
-                self._approaches[this_approach_id]['runway-code'] = (
+                self._approaches[approach_id]['airport-code'] = airport.code
+                self._approaches[approach_id]['runway-code'] = (
                     None if runway is None else runway.runwayCode
                 )
-                self._approaches[this_approach_id]['approach-start'] = idx_start
-                self._approaches[this_approach_id]['approach-end'] = idx_end
-                self._approaches[this_approach_id]['unstable'] = (
+                self._approaches[approach_id]['approach-start'] = idx_start
+                self._approaches[approach_id]['approach-end'] = idx_end
+                self._approaches[approach_id]['unstable'] = (
                     airplane_is_unstable
                 )
-                self._approaches[this_approach_id]['F1'] = unstable_reasons[0]
-                self._approaches[this_approach_id]['F2'] = unstable_reasons[1]
-                self._approaches[this_approach_id]['A'] = unstable_reasons[2]
-                self._approaches[this_approach_id]['S'] = unstable_reasons[3]
-                self._approaches[this_approach_id]['HDG'] = all_values[0]
-                self._approaches[this_approach_id]['CTR'] = all_values[1]
-                self._approaches[this_approach_id]['IAS'] = all_values[2]
-                self._approaches[this_approach_id]['VSI'] = all_values[3]
+                self._approaches[approach_id]['F1'] = unstable_reasons[0]
+                self._approaches[approach_id]['F2'] = unstable_reasons[1]
+                self._approaches[approach_id]['A'] = unstable_reasons[2]
+                self._approaches[approach_id]['S'] = unstable_reasons[3]
+                self._approaches[approach_id]['HDG'] = all_values[0]
+                self._approaches[approach_id]['CTR'] = all_values[1]
+                self._approaches[approach_id]['IAS'] = all_values[2]
+                self._approaches[approach_id]['VSI'] = all_values[3]
 
                 idx_takeoff_end = self._analyze_landing(
-                    idx_end, airport, this_approach_id
+                    idx_end, approach_id
                 )
         except (KeyError, IndexError):
             # We went out of bounds on an index in self._flight_data, which
@@ -371,7 +369,7 @@ class FlightAnalyzer(object):
     ):
         pass
 
-    def _analyze_landing(self, idx_start, airport, approach_id):
+    def _analyze_landing(self, idx_start, approach_id):
         idx_end = (
             self._flight_data.loc[idx_start:, 'radio_altitude_derived']
             >= APPROACH_MIN_ALTITUDE_AGL
