@@ -159,6 +159,11 @@ def main(flight_ids, run_multi_process, skip_output):
         'VSI': [],
     }
 
+    t_values = {
+        'speed-diffs': [],
+        'agl': [],
+    }
+
     for flight_id in flight_ids:
         logger.info('Processing Starting for Flight ID [%s]', flight_id)
         try:
@@ -170,13 +175,17 @@ def main(flight_ids, run_multi_process, skip_output):
             )
 
             for i, a in approaches.items():
-                for param in values.keys():
-                    if a['landing-type'] != 'go-around':
+                if a['landing-type'] != 'go-around':
+                    for param in values.keys():
                         if param == 'CTR' and (np.abs(a[param]) > 100).any():
                             with open('out.txt', 'a') as o:
                                 o.write('(%s, %s) => (%s, %s) => (%f, %f) => (%s, %s)\n' % (flight_id, i, a['airport-id'], a['runway-id'], np.abs(a[param]).max(), np.average(a[param]), a['approach-start'], a['approach-end']))
 
                         values[param].extend(a[param])
+
+            for i, t in takeoffs.items():
+                for param in t_values.keys():
+                    t_values[param].extend(t[param])
         except mysql.Error as e:
             logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
             logger.exception('Last Executed Query: %s', cursor._last_executed)
@@ -187,6 +196,9 @@ def main(flight_ids, run_multi_process, skip_output):
 
     with open('params.txt', 'w') as handle:
         json.dump(values, handle)
+
+    with open('t_params.txt', 'w') as handle:
+        json.dump(t_values, handle)
 
 
 @contextlib.contextmanager

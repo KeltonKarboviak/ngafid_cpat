@@ -263,13 +263,28 @@ class FlightAnalyzer(object):
 
         # TODO: do analysis
         takeoff_data_slice = self._flight_data.iloc[
-            idx_takeoff_start : idx_takeoff_end + 1
+            idx_takeoff_start : idx_takeoff_end+1
         ]
+
+        airport = takeoff_data_slice.loc[idx_takeoff_start, 'airport']
+        runway = self._detect_runway(
+            *takeoff_data_slice.loc[
+                idx_takeoff_start, ['LatLon', 'heading']
+            ].values,
+            airport=airport
+        )
+
+        speeds = takeoff_data_slice['indicated_airspeed']
+        speed_diffs = speeds.diff()
+        m = speed_diffs < 0
 
         # TODO: store analysis
         takeoff_id = self._takeoff_id
         self._takeoffs[takeoff_id] = {
-
+            'airport-id': airport.id,
+            'runway-id': None if runway is None else runway.id,
+            'speed-diffs': speed_diffs[m],
+            'agl': takeoff_data_slice.loc[m, 'radio_altitude_derived']
         }
 
         return idx_takeoff_end
@@ -594,12 +609,15 @@ class FlightAnalyzer(object):
             # marks that the pilot is transitioning from landing to takeoff.
             # We'll reset idx_landing_end to that point as well and store as
             # the landing's end.
-            min_rpm = landing_data_slice['eng_1_rpm'].values.min()
-            last_occurrence_of_min_rpm = landing_data_slice.loc[
-                landing_data_slice['eng_1_rpm'] == min_rpm, 'eng_1_rpm'
-            ].idxmax()
+            mask_takeoff_start = (landing_data_slice['eng_1_rpm'] > 2200) & (landing_data_slice['groundspeed'] > 25) & (landing_data_slice['indicated_airspeed'] > 0)
+            idx_landing_end = mask_takeoff_start.idxmax()
 
-            idx_landing_end = last_occurrence_of_min_rpm
+            # min_rpm = landing_data_slice['eng_1_rpm'].values.min()
+            # last_occurrence_of_min_rpm = landing_data_slice.loc[
+            #     landing_data_slice['eng_1_rpm'] == min_rpm, 'eng_1_rpm'
+            # ].idxmax()
+            #
+            # idx_landing_end = last_occurrence_of_min_rpm
 
         print(landing_result.value)  # TODO: remove after testing
 

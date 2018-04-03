@@ -1,0 +1,169 @@
+# coding: utf-8
+import argparse
+import contextlib
+import logging
+import multiprocessing
+import time
+from typing import Dict
+
+import MySQLdb as mysql
+import numpy as np
+import pandas as pd
+
+from airport import Airport
+from config import db_credentials
+from flight_analyzer import FlightAnalyzer
+from latlon import LatLon
+from quad_tree import QuadTree
+from runway import Runway
+import main
+
+""" IMPORT ENVIRONMENT-SPECIFIC CONFIGS """
+ENV = "dev"
+db_creds = db_credentials[ENV]
+
+""" SQL STATEMENTS """
+fetchAirportDataSQL = """\
+    SELECT id, code, name, city, state_code, latitude, longitude, elevation
+    FROM test_airports;
+"""
+fetchRunwayDataSQL = """\
+    SELECT
+        id, code, airport_id, touchdown_lat, touchdown_lon, tdze,
+        magnetic_course, true_course
+    FROM test_runways;
+"""
+fetchFlightIDsSQL = """\
+    SELECT flight_id FROM flight_analyses WHERE approach_analysis = 0;
+"""
+fetchAircraftTypeSQL = 'SELECT aircraft_type FROM flight_id WHERE id = %s;'
+fetchFlightDataSQL = """
+    SELECT
+        time, msl_altitude, radio_altitude_derived, indicated_airspeed,
+        vertical_airspeed, heading, latitude, longitude, pitch_attitude,
+        roll_attitude, eng_1_rpm
+    FROM
+        main
+    WHERE
+        flight = %s
+    ORDER BY time ASC;
+"""
+
+
+db = mysql.connect(**db_creds)
+cursor = db.cursor(mysql.cursors.DictCursor)
+airports = {}
+flight_id = 381001
+
+
+cursor.execute(fetchAirportDataSQL)
+airports = {
+    airport['id']: Airport(
+        airport['id'],
+        airport['code'],
+        airport['name'],
+        airport['city'],
+        airport['state_code'],
+        airport['latitude'],
+        airport['longitude'],
+        airport['elevation']
+    )
+    for airport in cursor.fetchall()
+}
+
+cursor.execute(fetchRunwayDataSQL)
+for runway in cursor.fetchall():
+    airports[runway['airport_id']].add_runway(Runway(
+        runway['id'],
+        runway['airport_id'],
+        runway['tdze'],
+        runway['code'],
+        runway['magnetic_course'],
+        runway['true_course'],
+        runway['touchdown_lat'],
+        runway['touchdown_lon']
+    ))
+
+quad_tree = QuadTree()
+for k, v in airports.items():
+    quad_tree.insert(v)
+
+
+aircraft_type_id = 1
+
+df = pd.read_sql(fetchFlightDataSQL, con=db, params=[flight_id])
+vector_create_latlons = np.vectorize(lambda lat, lon: LatLon(lat, lon))
+df.loc[:, 'LatLon'] = vector_create_latlons(
+        *df[['latitude', 'longitude']].T.values
+    )
+
+
+from geoutils import (
+    signed_heading_difference,
+    unsigned_heading_difference,
+    vincenty_distance,
+)
+
+''' GLOBAL EXCEEDANCE THRESHOLDS '''
+APPROACH_MIN_IAS = 55
+APPROACH_MAX_IAS = 75
+APPROACH_MAX_HEADING_ERROR = 10
+APPROACH_MIN_VSI = -1000
+APPROACH_MAX_CROSSTRACK_ERROR = 50
+APPROACH_MIN_DISTANCE = 1
+APPROACH_MIN_ALTITUDE_AGL = 500
+APPROACH_FINAL_MAX_ALTITUDE_AGL = 150
+APPROACH_FINAL_MIN_ALTITUDE_AGL = 50
+FULL_STOP_SPEED_INDICATOR = 35
+TOUCH_AND_GO_ELEVATION_INDICATOR = 5
+RUNWAY_SELECTION_INDICATOR = 20
+
+CROSS_TRACK_LEVEL_1_ERROR = 25  # feet
+CROSS_TRACK_LEVEL_2_ERROR = 100  # feet
+
+TURN_START_DEGREES = 90
+TURN_END_DEGREES = 15
+
+MILES_TO_FEET = 5280
+AGL_WINDOW_SECONDS = 5
+EARTH_RADIUS_MILES = 3959
+EARTH_RADIUS_FEET = 20900000
+
+def _cross_track_to_center_line(
+    airplane_point: LatLon,
+    runway: Runway
+) -> float:
+    return airplane_point.cross_track_distance_to(
+        runway.centerLatLon, runway.trueHeading, EARTH_RADIUS_FEET
+    )
+
+vector_get_nearest_airports = np.vectorize(
+    quad_tree.get_nearest_airport
+)
+vector_cross_track_distance = np.vectorize(
+    _cross_track_to_center_line
+)
+
+
+
+# Get airport that is closest to each point
+airplane_data = df[['latitude', 'longitude']].T.values
+df.loc[:, 'airport'] = vector_get_nearest_airports(
+    *airplane_data
+)
+
+# Get distance from airplane to closest airport at each point
+airps = df['airport'].values
+airport_data = (
+    [a.centerLatLon.lat for a in airps],
+    [a.centerLatLon.lon for a in airps],
+)
+df.loc[:, 'distance'] = vincenty_distance(
+    *airplane_data, *airport_data
+) * MILES_TO_FEET
+
+# Get AGL at each point
+if 'radio_altitude_derived' not in df.columns:
+    df.loc[:, 'radio_altitude_derived'] = (
+        airplane_data[2] - airport_data[2]
+    )
