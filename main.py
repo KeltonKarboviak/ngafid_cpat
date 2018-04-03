@@ -53,7 +53,7 @@ fetchFlightDataSQL = """
     SELECT
         time, msl_altitude, radio_altitude_derived, indicated_airspeed,
         vertical_airspeed, heading, latitude, longitude, pitch_attitude,
-        roll_attitude, eng_1_rpm
+        roll_attitude, eng_1_rpm, groundspeed
     FROM
         main
     WHERE
