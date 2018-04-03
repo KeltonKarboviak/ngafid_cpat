@@ -4,7 +4,7 @@ from __future__ import print_function
 
 from collections import namedtuple
 from enum import Enum
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 import MySQLdb as mysql
 import numpy as np
@@ -36,6 +36,12 @@ FULL_STOP_SPEED_INDICATOR = 35
 TOUCH_AND_GO_ELEVATION_INDICATOR = 5
 RUNWAY_SELECTION_INDICATOR = 20
 
+CROSS_TRACK_LEVEL_1_ERROR = 25  # feet
+CROSS_TRACK_LEVEL_2_ERROR = 100  # feet
+
+TURN_START_DEGREES = 90
+TURN_END_DEGREES = 15
+
 MILES_TO_FEET = 5280
 AGL_WINDOW_SECONDS = 5
 EARTH_RADIUS_MILES = 3959
@@ -47,9 +53,10 @@ SELECT_THRESHOLDS_SQL = """\
 
 INSERT_KEYS_LIST = [
     'flight_id', 'approach_id', 'airport_id', 'runway_id',
+    'turn_start', 'turn_end', 'turn_error_severity', 'turn_error_type',
     'approach_start', 'approach_end', 'landing_start', 'landing_end',
-    'landing_type', 'unstable', 'all_heading', 'f1_heading',
-    'all_crosstrack', "f2_crosstrack", 'all_ias', 'a_ias', 'all_vsi', 's_vsi',
+    'landing_type', 'unstable', 'all_heading', 'f1_heading', 'all_crosstrack',
+    "f2_crosstrack", 'all_ias', 'a_ias', 'all_vsi', 's_vsi',
 ]
 INSERT_KEYS_SQL = ', '.join(INSERT_KEYS_LIST)
 INSERT_UPDATE_VALUES_SQL = ', '.join(
@@ -76,6 +83,11 @@ LandingAnalysisResult = namedtuple(
 
 
 def rolling_window(a, window):
+    if len(a) < window:
+        # If array does not have at least `window` number of elements, then
+        # return a 2D array with a single NAN
+        return np.array([[np.nan]])
+
     shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
     strides = a.strides + (a.strides[-1],)
 
@@ -128,14 +140,16 @@ class FlightAnalyzer(object):
         # if not self.skipOutputToDB:
         self._output_to_db()
 
+        takeoffs, approaches = self._takeoffs.copy(), self._approaches.copy()
+
         # Reset global variables for next analysis
         self._clear_takeoffs()
         self._reset_takeoff_id()
         self._clear_approaches()
         self._reset_approach_id()
 
-        # Return the dict of approaches
-        return self._takeoffs, self._approaches
+        # Return the dicts of takeoffs & approaches
+        return takeoffs, approaches
 
     def _derive_necessary_data(self, df: pd.DataFrame) -> pd.DataFrame:
         # Get airport that is closest to each point
@@ -199,18 +213,20 @@ class FlightAnalyzer(object):
         return next_id
 
     def _analyze(self):
-        idx, is_followed_by_takeoff, idx_takeoff_end = 0, True, 0
+        idx_takeoff_start, idx_takeoff_end, is_followed_by_takeoff = 0, 0, True
 
         try:
-            while idx < len(self._flight_data.index) - 1:
+            while idx_takeoff_start < self._flight_data.index[-1]:
                 if is_followed_by_takeoff:
-                    idx_takeoff_end = self._analyze_takeoff(idx)
+                    idx_takeoff_end = self._analyze_takeoff(idx_takeoff_start)
                     self._takeoff_id += 1
+                else:
+                    idx_takeoff_end = idx_takeoff_start
 
                 idx_approach_end = self._analyze_approach(idx_takeoff_end)
 
                 landing_results = self._analyze_landing(idx_approach_end)
-                is_followed_by_takeoff, idx = (
+                is_followed_by_takeoff, idx_takeoff_start = (
                     landing_results.is_followed_by_takeoff,
                     landing_results.idx_landing_end
                 )
@@ -231,10 +247,19 @@ class FlightAnalyzer(object):
         APPROACH_MIN_ALTITUDE_AGL).
         """
         # This will return the first index where the condition is True
-        idx_takeoff_end = (
+        mask_above_500_ft = (
             self._flight_data.loc[idx_takeoff_start:, 'radio_altitude_derived']
             > APPROACH_MIN_ALTITUDE_AGL
-        ).idxmax()
+        )
+
+        if not mask_above_500_ft.any():
+            # If all of the entries in the mask are False, that means there
+            # is not a takeoff for the rest of the data (which means
+            # something weird happened).  Therefore, we'll just return the
+            # last index of the data + 1 to stop all analysis from happening.
+            return self._flight_data.index[-1] + 1
+
+        idx_takeoff_end = mask_above_500_ft.idxmax()
 
         # TODO: do analysis
         takeoff_data_slice = self._flight_data.iloc[
@@ -260,7 +285,19 @@ class FlightAnalyzer(object):
                 ] < APPROACH_MIN_ALTITUDE_AGL
             )
         )
+
+        if not mask_within_mile_below_500_ft.any():
+            # If all entries in the mask are False, then that means there was
+            # not another approach attempt for the rest of the data.
+            # Therefore, we will return the last index in the data to signify
+            # we've reached the end.
+            return self._flight_data.index[-1]
+
         idx_approach_attempt = mask_within_mile_below_500_ft.idxmax()
+
+        # Create a new dictionary to store the results of the current
+        # approach
+        self._approaches[self._approach_id] = {}
 
         airport = self._flight_data.loc[idx_approach_attempt, 'airport']
 
@@ -279,13 +316,6 @@ class FlightAnalyzer(object):
         )
         idx_approach_start = mask_not_between_150_500_ft_agl.idxmax()
 
-        runway = self._detect_runway(
-            *self._flight_data.loc[
-                idx_approach_start, ['LatLon', 'heading']
-            ].values,
-            airport=airport
-        )
-
         mask_not_within_mile_between_50_150_ft = ~(
             (self._flight_data.loc[idx_approach_start:, 'distance'] < 5280)
             & (
@@ -300,8 +330,47 @@ class FlightAnalyzer(object):
         )
         idx_approach_end = mask_not_within_mile_between_50_150_ft.idxmax()
 
+        runway = self._detect_runway(
+            *self._flight_data.loc[
+                idx_approach_end, ['LatLon', 'heading']
+            ].values,
+            airport=airport
+        )
+
+        if runway is not None:
+            idx_turn_start, idx_turn_end = self._find_turn_to_final(
+                idx_approach_end, runway
+            )
+
+            # Check to see if a turn-to-final was actually performed
+            if idx_turn_start is not None and idx_turn_end is not None:
+                turn_severity, turn_type = self._analyze_turn_to_final(
+                    idx_turn_start, idx_turn_end, runway
+                )
+
+                # If there was a turn-to-final, then we'll say that the
+                # approach starts where the turn ends. This makes graphing
+                # look continuous.
+                idx_approach_start = max(idx_turn_end, idx_approach_start)
+            else:
+                turn_severity, turn_type = None, None
+        else:
+            # If we don't have the runway, then we'll set both the turn's start
+            # & end to the index of the approach start, and None to the turn
+            # details
+            idx_turn_start, idx_turn_end, turn_severity, turn_type = (
+                idx_approach_start, idx_approach_start, None, None
+            )
+
+        self._approaches[self._approach_id].update({
+            'turn-start': idx_turn_start,
+            'turn-end': idx_turn_end,
+            'turn-error-severity': turn_severity,
+            'turn-error-type': turn_type
+        })
+
         approach_data_slice = self._flight_data.iloc[
-            idx_approach_start : idx_approach_end+1
+            idx_approach_start: idx_approach_end + 1
         ]
 
         # Perform parameter analyses
@@ -357,15 +426,11 @@ class FlightAnalyzer(object):
                 unstable_reasons[1] = cross_track_errors[~cond_f2]
             if not cond_a.all():
                 unstable_reasons[2] = (
-                    approach_data_slice['indicated_airspeed'].values[
-                        ~cond_a
-                    ]
+                    approach_data_slice['indicated_airspeed'].values[~cond_a]
                 )
             if not cond_s.all():
                 unstable_reasons[3] = (
-                    approach_data_slice['vertical_airspeed'].values[
-                        ~cond_s
-                    ]
+                    approach_data_slice['vertical_airspeed'].values[~cond_s]
                 )
 
             # Get all parameter values in the approach (stable or
@@ -377,10 +442,9 @@ class FlightAnalyzer(object):
             all_values[2] = approach_data_slice['indicated_airspeed'].values
             all_values[3] = approach_data_slice['vertical_airspeed'].values
 
-        approach_id = self._approach_id
-        self._approaches[approach_id] = {
-            'airport-code': airport.code,
-            'runway-code': None if runway is None else runway.runwayCode,
+        self._approaches[self._approach_id].update({
+            'airport-id': airport.id,
+            'runway-id': None if runway is None else runway.id,
             'approach-start': idx_approach_start,
             'approach-end': idx_approach_end,
             'unstable': airplane_is_unstable,
@@ -392,41 +456,112 @@ class FlightAnalyzer(object):
             'CTR': all_values[1],
             'IAS': all_values[2],
             'VSI': all_values[3],
-        }
-        # self._approaches[approach_id]['airport-code'] = airport.code
-        # self._approaches[approach_id]['runway-code'] = (
-        #     None if runway is None else runway.runwayCode
-        # )
-        # self._approaches[approach_id]['approach-start'] = idx_approach_start
-        # self._approaches[approach_id]['approach-end'] = idx_approach_end
-        # self._approaches[approach_id]['unstable'] = airplane_is_unstable
-        # self._approaches[approach_id]['F1'] = unstable_reasons[0]
-        # self._approaches[approach_id]['F2'] = unstable_reasons[1]
-        # self._approaches[approach_id]['A'] = unstable_reasons[2]
-        # self._approaches[approach_id]['S'] = unstable_reasons[3]
-        # self._approaches[approach_id]['HDG'] = all_values[0]
-        # self._approaches[approach_id]['CTR'] = all_values[1]
-        # self._approaches[approach_id]['IAS'] = all_values[2]
-        # self._approaches[approach_id]['VSI'] = all_values[3]
+        })
 
         return idx_approach_end
 
+    def _find_turn_to_final(
+        self,
+        idx_approach_end: int,
+        runway: Runway
+    ) -> Tuple[int, int]:
+        # Get last 3 minutes (180 seconds) of data before 'idx_approach_end'
+        heading_series = self._flight_data.iloc[idx_approach_end-180 : idx_approach_end]['heading']
+        heading_errors = pd.Series(
+            unsigned_heading_difference(runway.magHeading, heading_series.values),
+            index=heading_series.index
+        )
+
+        # We'll use this as the heading error indicator that the pilot is
+        # beginning their turn-to-final. It will either be the minimum of
+        # TURN_START_DEGREES or the maximum of the heading errors. The latter
+        # value is used when the aircraft is never more than TURN_START_DEGREES
+        # off of the runway heading.
+        # turn_start_indicator = min(
+        #     heading_errors.values.max(),
+        #     TURN_START_DEGREES
+        # )
+        mask_hdg_error_geq_90_deg = (heading_errors[::-1] >= TURN_START_DEGREES)
+        idx_turn_start = mask_hdg_error_geq_90_deg.idxmax()
+
+        if not mask_hdg_error_geq_90_deg.any():
+            # If there were not any heading errors >= 90 deg within the last
+            # 3 mins, that means the aircraft performed a straight-in approach
+            # and did not have a turn-to-final
+            idx_turn_start, idx_turn_end = None, None
+        else:
+            idx_turn_end = (
+                heading_errors.loc[:idx_turn_start:-1] >= TURN_END_DEGREES
+            ).idxmax()
+
+        return idx_turn_start, idx_turn_end
+
+    def _analyze_turn_to_final(
+        self,
+        idx_turn_start: int,
+        idx_turn_end: int,
+        runway: Runway
+    ) -> Tuple[Optional[str], str]:
+        turn_data_slice = self._flight_data.iloc[
+            idx_turn_start : idx_turn_end+1
+        ]
+
+        cross_track_error = self._cross_track_to_center_line(
+            turn_data_slice.loc[idx_turn_end, 'LatLon'], runway
+        )
+
+        left_direction = abs(turn_data_slice['roll_attitude'].values.min())
+        right_direction = abs(turn_data_slice['roll_attitude'].values.max())
+        roll_direction = 'left' \
+            if left_direction > right_direction \
+            else 'right'
+
+        abs_cross_track_error = abs(cross_track_error)
+        if abs_cross_track_error > CROSS_TRACK_LEVEL_2_ERROR:
+            severity = 'large'
+        elif abs_cross_track_error > CROSS_TRACK_LEVEL_1_ERROR:
+            severity = 'small'
+        else:
+            severity = None
+
+        if severity is not None:
+            if roll_direction == 'left':
+                turn_error = 'undershoot' if cross_track_error < 0 else 'overshoot'
+            else:
+                turn_error = 'undershoot' if cross_track_error > 0 else 'overshoot'
+        else:
+            turn_error = 'aligned'
+
+        return severity, turn_error
+
     def _analyze_landing(self, idx_landing_start: int) -> LandingAnalysisResult:
-        idx_landing_end = (
+        if idx_landing_start == self._flight_data.index[-1]:
+            # If we are given the last index of data as the landing start,
+            # that means there was an issue in the approach analysis. So
+            # we'll just return the same index as the landing's end so that
+            # the analysis loop will stop.
+            return LandingAnalysisResult(
+                is_followed_by_takeoff=False,
+                idx_landing_end=self._flight_data.index[-1]
+            )
+
+        mask_above_500_ft = (
             self._flight_data.loc[idx_landing_start:, 'radio_altitude_derived']
             >= APPROACH_MIN_ALTITUDE_AGL
-        ).idxmax()
+        )
 
-        # If idx_landing_end == idx_landing_start, that means the condition
-        # above was False for the rest of the dataframe. Thus, we'll assign it
-        # the last index.
-        end_of_data = idx_landing_end == idx_landing_start
+        # If there are not any True entries in the mask, that means the
+        # condition above was False for the rest of the dataframe. Thus, we'll
+        # assign it the last index.
+        end_of_data = not mask_above_500_ft.any()
 
         if end_of_data:
-            idx_landing_end = len(self._flight_data.index) - 1
+            idx_landing_end = self._flight_data.index[-1]
+        else:
+            idx_landing_end = mask_above_500_ft.idxmax()
 
         landing_data_slice = self._flight_data.iloc[
-            idx_landing_start : idx_landing_end + 1
+            idx_landing_start : idx_landing_end+1
         ]
 
         full_stop = (
@@ -435,7 +570,8 @@ class FlightAnalyzer(object):
         ).any()
 
         agl_5_sec_windows = rolling_window(
-            landing_data_slice['radio_altitude_derived'], AGL_WINDOW_SECONDS
+            landing_data_slice['radio_altitude_derived'].values,
+            AGL_WINDOW_SECONDS
         )
         touch_and_go = (
             np.average(agl_5_sec_windows, axis=1)
@@ -456,7 +592,7 @@ class FlightAnalyzer(object):
             # Since this landing will be followed by a takeoff, we will find
             # the last index in which the minimum RPM value occurs. That point
             # marks that the pilot is transitioning from landing to takeoff.
-            # We'll re-set idx_landing_end to that point as well and store as
+            # We'll reset idx_landing_end to that point as well and store as
             # the landing's end.
             min_rpm = landing_data_slice['eng_1_rpm'].values.min()
             last_occurrence_of_min_rpm = landing_data_slice.loc[
@@ -464,8 +600,6 @@ class FlightAnalyzer(object):
             ].idxmax()
 
             idx_landing_end = last_occurrence_of_min_rpm
-            # idx_takeoff_end = idx_landing_end
-            # idx_takeoff_start = idx_landing_end = last_occurrence_of_min_rpm
 
         print(landing_result.value)  # TODO: remove after testing
 
@@ -475,9 +609,6 @@ class FlightAnalyzer(object):
             'landing-start': idx_landing_start,
             'landing-end': idx_landing_end,
         })
-        # self._approaches[approach_id]['landing-type'] = landing_result.value
-        # self._approaches[approach_id]['landing-start'] = idx_landing_start
-        # self._approaches[approach_id]['landing-end'] = idx_landing_end
         print('')  # TODO: remove after testing
 
         return LandingAnalysisResult(
@@ -501,19 +632,19 @@ class FlightAnalyzer(object):
         airport: Airport
     ) -> Runway:
         our_runway = None
-        closest_difference = 0
+        closest_difference = 10e6
         for runway in airport.runways:
             if (
                 unsigned_heading_difference(runway.magHeading, airplane_hdg)
                 <= RUNWAY_SELECTION_INDICATOR
             ):
-                d_lat = abs(runway.centerLatLon.lat - airplane_point.lat)
-                d_lon = abs(runway.centerLatLon.lon - airplane_point.lon)
-                total_difference = d_lat + d_lon
+                difference = airplane_point.distance_to(
+                    runway.centerLatLon, EARTH_RADIUS_FEET
+                )
 
-                if our_runway is None or total_difference < closest_difference:
+                if difference < closest_difference:
                     our_runway = runway
-                    closest_difference = total_difference
+                    closest_difference = difference
 
         return our_runway
 
@@ -522,8 +653,12 @@ class FlightAnalyzer(object):
             (
                 self._flight_id,
                 approach_id + 1,
-                approach['airport-code'],
-                approach['runway-code'],
+                approach['airport-id'],
+                approach['runway-id'],
+                approach['turn-start'],
+                approach['turn-end'],
+                approach['turn-error-severity'],
+                approach['turn-error-type'],
                 approach['approach-start'],
                 approach['approach-end'],
                 approach['landing-start'],

@@ -9,6 +9,7 @@ class Airport(object):
 
     def __init__(
         self,
+        id: int,
         code: str,
         name: str,
         city: str,
@@ -17,6 +18,7 @@ class Airport(object):
         lon: float,
         alt: float
     ):
+        self.id = id
         self.code = code
         self.name = name
         self.city = city
@@ -44,4 +46,4 @@ class Airport(object):
 class NullAirport(Airport):
 
     def __init__(self):
-        super(NullAirport, self).__init__('', '', '', '', nan, nan, nan)
+        super(NullAirport, self).__init__(-1, '', '', '', '', nan, nan, nan)
