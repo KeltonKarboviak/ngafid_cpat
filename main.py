@@ -164,6 +164,10 @@ def main(flight_ids, run_multi_process, skip_output):
         'agl': [],
     }
 
+    turn_values = {
+        'turn-cross-track-error': [],
+    }
+
     for flight_id in flight_ids:
         logger.info('Processing Starting for Flight ID [%s]', flight_id)
         try:
@@ -186,6 +190,12 @@ def main(flight_ids, run_multi_process, skip_output):
             for i, t in takeoffs.items():
                 for param in t_values.keys():
                     t_values[param].extend(t[param])
+
+            for i, a in approaches.items():
+                for param in turn_values.keys():
+                    if a[param] is not None:
+                        turn_values[param].append(a[param])
+
         except mysql.Error as e:
             logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
             logger.exception('Last Executed Query: %s', cursor._last_executed)
@@ -199,6 +209,9 @@ def main(flight_ids, run_multi_process, skip_output):
 
     with open('t_params.txt', 'w') as handle:
         json.dump(t_values, handle)
+
+    with open('turn_params.txt', 'w') as handle:
+        json.dump(turn_values, handle)
 
 
 @contextlib.contextmanager

@@ -30,7 +30,7 @@ APPROACH_MIN_VSI = -1000
 APPROACH_MAX_CROSSTRACK_ERROR = 50
 APPROACH_MIN_DISTANCE = 1
 APPROACH_MIN_ALTITUDE_AGL = 500
-APPROACH_FINAL_MAX_ALTITUDE_AGL = 150
+APPROACH_FINAL_MAX_ALTITUDE_AGL = 200
 APPROACH_FINAL_MIN_ALTITUDE_AGL = 50
 FULL_STOP_SPEED_INDICATOR = 35
 TOUCH_AND_GO_ELEVATION_INDICATOR = 5
@@ -53,7 +53,7 @@ SELECT_THRESHOLDS_SQL = """\
 
 INSERT_KEYS_LIST = [
     'flight_id', 'approach_id', 'airport_id', 'runway_id',
-    'turn_start', 'turn_end', 'turn_error_severity', 'turn_error_type',
+    'turn_start', 'turn_end', 'turn_error_type', 'turn_risk_level',
     'approach_start', 'approach_end', 'landing_start', 'landing_end',
     'landing_type', 'unstable', 'all_heading', 'f1_heading', 'all_crosstrack',
     "f2_crosstrack", 'all_ias', 'a_ias', 'all_vsi', 's_vsi',
@@ -359,29 +359,31 @@ class FlightAnalyzer(object):
 
             # Check to see if a turn-to-final was actually performed
             if idx_turn_start is not None and idx_turn_end is not None:
-                turn_severity, turn_type = self._analyze_turn_to_final(
+                turn_risk_level, turn_type, cross_track_error = self._analyze_turn_to_final(
                     idx_turn_start, idx_turn_end, runway
                 )
 
                 # If there was a turn-to-final, then we'll say that the
-                # approach starts where the turn ends. This makes graphing
-                # look continuous.
+                # approach starts at the larger of the 2: current approach
+                # start index or the turn end index. We do this so that the
+                # end of the turn does not overlap with the start of the
+                # approach.
                 idx_approach_start = max(idx_turn_end, idx_approach_start)
             else:
-                turn_severity, turn_type = None, None
+                turn_risk_level, turn_type, cross_track_error = None, None, None
         else:
-            # If we don't have the runway, then we'll set both the turn's start
-            # & end to the index of the approach start, and None to the turn
-            # details
-            idx_turn_start, idx_turn_end, turn_severity, turn_type = (
-                idx_approach_start, idx_approach_start, None, None
+            # If we don't have the runway, then we'll set all the turn
+            # details to None
+            idx_turn_start, idx_turn_end, turn_risk_level, turn_type, cross_track_error = (
+                None, None, None, None, None
             )
 
         self._approaches[self._approach_id].update({
             'turn-start': idx_turn_start,
             'turn-end': idx_turn_end,
-            'turn-error-severity': turn_severity,
-            'turn-error-type': turn_type
+            'turn-risk-level': turn_risk_level,
+            'turn-error-type': turn_type,
+            'turn-cross-track-error': cross_track_error,
         })
 
         approach_data_slice = self._flight_data.iloc[
@@ -496,7 +498,7 @@ class FlightAnalyzer(object):
         #     heading_errors.values.max(),
         #     TURN_START_DEGREES
         # )
-        mask_hdg_error_geq_90_deg = (heading_errors[::-1] >= TURN_START_DEGREES)
+        mask_hdg_error_geq_90_deg = heading_errors[::-1] >= TURN_START_DEGREES
         idx_turn_start = mask_hdg_error_geq_90_deg.idxmax()
 
         if not mask_hdg_error_geq_90_deg.any():
@@ -516,7 +518,7 @@ class FlightAnalyzer(object):
         idx_turn_start: int,
         idx_turn_end: int,
         runway: Runway
-    ) -> Tuple[Optional[str], str]:
+    ) -> Tuple[int, str, float]:
         turn_data_slice = self._flight_data.iloc[
             idx_turn_start : idx_turn_end+1
         ]
@@ -533,21 +535,18 @@ class FlightAnalyzer(object):
 
         abs_cross_track_error = abs(cross_track_error)
         if abs_cross_track_error > CROSS_TRACK_LEVEL_2_ERROR:
-            severity = 'large'
+            risk_level = 2
         elif abs_cross_track_error > CROSS_TRACK_LEVEL_1_ERROR:
-            severity = 'small'
+            risk_level = 1
         else:
-            severity = None
+            risk_level = 0
 
-        if severity is not None:
-            if roll_direction == 'left':
-                turn_error = 'undershoot' if cross_track_error < 0 else 'overshoot'
-            else:
-                turn_error = 'undershoot' if cross_track_error > 0 else 'overshoot'
+        if roll_direction == 'left':
+            turn_error = 'undershoot' if cross_track_error < 0 else 'overshoot'
         else:
-            turn_error = 'aligned'
+            turn_error = 'undershoot' if cross_track_error > 0 else 'overshoot'
 
-        return severity, turn_error
+        return risk_level, turn_error, cross_track_error
 
     def _analyze_landing(self, idx_landing_start: int) -> LandingAnalysisResult:
         if idx_landing_start == self._flight_data.index[-1]:
@@ -675,8 +674,8 @@ class FlightAnalyzer(object):
                 approach['runway-id'],
                 approach['turn-start'],
                 approach['turn-end'],
-                approach['turn-error-severity'],
                 approach['turn-error-type'],
+                approach['turn-risk-level'],
                 approach['approach-start'],
                 approach['approach-end'],
                 approach['landing-start'],
