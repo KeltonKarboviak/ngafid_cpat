@@ -89,10 +89,12 @@ def vincenty_distance(lats1, lons1, lats2, lons2):
 
     i = 0
     while (
-        (absolute(lambda_lons - lambda_primes) > 10e-12).any()
-        and i <= iter_limit
+        (
+            (absolute(lambda_lons - lambda_primes) > 10e-12).any()
+            and i <= iter_limit
+        )
+        or i == 0
     ):
-
         i += 1
 
         sin_lambda_lons, cos_lambda_lons = sin(lambda_lons), cos(lambda_lons)

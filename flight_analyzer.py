@@ -529,7 +529,6 @@ class FlightAnalyzer(object):
         #     TURN_START_DEGREES
         # )
         mask_hdg_error_geq_90_deg = heading_errors[::-1] >= TURN_START_DEGREES
-        idx_turn_start = mask_hdg_error_geq_90_deg.idxmax()
 
         if not mask_hdg_error_geq_90_deg.any():
             # If there were not any heading errors >= 90 deg within the last
@@ -537,6 +536,7 @@ class FlightAnalyzer(object):
             # and did not have a turn-to-final
             idx_turn_start, idx_turn_end = None, None
         else:
+            idx_turn_start = mask_hdg_error_geq_90_deg.idxmax()
             idx_turn_end = (
                 heading_errors.loc[:idx_turn_start:-1] >= TURN_END_DEGREES
             ).idxmax()
