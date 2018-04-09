@@ -146,12 +146,9 @@ def init(airports_dict, qt, skip_output: bool):
     cursor = db.cursor(mysql.cursors.DictCursor)
 
     # Load airports into dict
-    # airports = load_airport_data()
-    # load_runway_data_into_airports()
     airports = airports_dict
 
     # Load Airports into a QuadTree
-    # quad_tree = load_quad_tree(airports)
     quad_tree = qt
 
     analyzer = FlightAnalyzer(db, quad_tree, skip_output)

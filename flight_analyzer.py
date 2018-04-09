@@ -414,9 +414,12 @@ class FlightAnalyzer(object):
                     runway.magHeading,
                     approach_data_slice['heading'].values
                 )
-                heading_risk_level = self.vector_get_risk_level(
-                    'hdg', heading_errors
-                ).max()
+                heading_risk_level = get_risk_level(
+                    'hdg', np.average(heading_errors)
+                )
+                # heading_risk_level = self.vector_get_risk_level(
+                #     'hdg', heading_errors
+                # ).max()
                 cond_f1 = (
                     absolute(heading_errors)
                     <= APPROACH_MAX_HEADING_ERROR
@@ -425,9 +428,12 @@ class FlightAnalyzer(object):
                 cross_track_errors = self.vector_cross_track_distance(
                     approach_data_slice['LatLon'], runway
                 )
-                cross_track_risk_level = self.vector_get_risk_level(
-                    'ctr', cross_track_errors
-                ).max()
+                cross_track_risk_level = get_risk_level(
+                    'ctr', np.average(cross_track_errors)
+                )
+                # cross_track_risk_level = self.vector_get_risk_level(
+                #     'ctr', cross_track_errors
+                # ).max()
                 cond_f2 = (
                     absolute(cross_track_errors)
                     <= APPROACH_MAX_CROSSTRACK_ERROR
@@ -438,16 +444,24 @@ class FlightAnalyzer(object):
                 )
                 heading_risk_level, cross_track_risk_level = 0, 0
 
-            ias_risk_level = self.vector_get_risk_level(
-                'ias', approach_data_slice['indicated_airspeed'].values
-            ).max()
+            ias_risk_level = get_risk_level(
+                'ias',
+                np.average(approach_data_slice['indicated_airspeed'].values)
+            )
+            # ias_risk_level = self.vector_get_risk_level(
+            #     'ias', approach_data_slice['indicated_airspeed'].values
+            # ).max()
             cond_a = approach_data_slice['indicated_airspeed'].between(
                 APPROACH_MIN_IAS, APPROACH_MAX_IAS, inclusive=True
             ).values
 
-            vsi_risk_level = self.vector_get_risk_level(
-                'vsi', approach_data_slice['vertical_airspeed'].values
-            ).max()
+            vsi_risk_level = get_risk_level(
+                'vsi',
+                np.average(approach_data_slice['vertical_airspeed'].values)
+            )
+            # vsi_risk_level = self.vector_get_risk_level(
+            #     'vsi', approach_data_slice['vertical_airspeed'].values
+            # ).max()
             cond_s = (
                 approach_data_slice['vertical_airspeed'].values
                 >= APPROACH_MIN_VSI
