@@ -2,9 +2,10 @@
 
 from __future__ import print_function
 
+import logging
 from collections import namedtuple
 from enum import Enum
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple
 
 import MySQLdb as mysql
 import numpy as np
@@ -18,11 +19,19 @@ from geoutils import (
     vincenty_distance,
 )
 from latlon import LatLon
+from metrics import get_risk_level
 from quad_tree import QuadTree
 from runway import Runway
 
 
-''' GLOBAL EXCEEDANCE THRESHOLDS '''
+'''LOGGING SETUP'''
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(process)d - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+'''GLOBAL EXCEEDANCE THRESHOLDS'''
 APPROACH_MIN_IAS = 55
 APPROACH_MAX_IAS = 75
 APPROACH_MAX_HEADING_ERROR = 10
@@ -55,8 +64,11 @@ INSERT_KEYS_LIST = [
     'flight_id', 'approach_id', 'airport_id', 'runway_id',
     'turn_start', 'turn_end', 'turn_error_type', 'turn_risk_level',
     'approach_start', 'approach_end', 'landing_start', 'landing_end',
-    'landing_type', 'unstable', 'all_heading', 'f1_heading', 'all_crosstrack',
-    "f2_crosstrack", 'all_ias', 'a_ias', 'all_vsi', 's_vsi',
+    'landing_type', 'unstable',
+    'all_heading', 'f1_heading', 'heading_risk_level',
+    'all_crosstrack', 'f2_crosstrack', 'crosstrack_risk_level',
+    'all_ias', 'a_ias', 'ias_risk_level',
+    'all_vsi', 's_vsi', 'vsi_risk_level',
 ]
 INSERT_KEYS_SQL = ', '.join(INSERT_KEYS_LIST)
 INSERT_UPDATE_VALUES_SQL = ', '.join(
@@ -118,6 +130,7 @@ class FlightAnalyzer(object):
         self.vector_cross_track_distance = np.vectorize(
             self._cross_track_to_center_line
         )
+        self.vector_get_risk_level = np.vectorize(get_risk_level)
 
     def analyze(
         self,
@@ -316,11 +329,10 @@ class FlightAnalyzer(object):
 
         airport = self._flight_data.loc[idx_approach_attempt, 'airport']
 
-        print(
-            'Airplane is approaching {}, {}: {}'.format(
-                airport.city, airport.state, airport.code
-            )
-        )  # TODO: remove after testing
+        logger.debug(
+            'Airplane is approaching %s, %s: %s',
+            airport.city, airport.state, airport.code
+        )
 
         mask_not_between_150_500_ft_agl = ~self._flight_data.loc[
             idx_approach_attempt:, 'radio_altitude_derived'
@@ -402,6 +414,9 @@ class FlightAnalyzer(object):
                     runway.magHeading,
                     approach_data_slice['heading'].values
                 )
+                heading_risk_level = self.vector_get_risk_level(
+                    'hdg', heading_errors
+                ).max()
                 cond_f1 = (
                     absolute(heading_errors)
                     <= APPROACH_MAX_HEADING_ERROR
@@ -410,6 +425,9 @@ class FlightAnalyzer(object):
                 cross_track_errors = self.vector_cross_track_distance(
                     approach_data_slice['LatLon'], runway
                 )
+                cross_track_risk_level = self.vector_get_risk_level(
+                    'ctr', cross_track_errors
+                ).max()
                 cond_f2 = (
                     absolute(cross_track_errors)
                     <= APPROACH_MAX_CROSSTRACK_ERROR
@@ -418,10 +436,18 @@ class FlightAnalyzer(object):
                 cond_f1 = cond_f2 = np.full_like(
                     approach_data_slice.index, True
                 )
+                heading_risk_level, cross_track_risk_level = 0, 0
 
+            ias_risk_level = self.vector_get_risk_level(
+                'ias', approach_data_slice['indicated_airspeed'].values
+            ).max()
             cond_a = approach_data_slice['indicated_airspeed'].between(
                 APPROACH_MIN_IAS, APPROACH_MAX_IAS, inclusive=True
             ).values
+
+            vsi_risk_level = self.vector_get_risk_level(
+                'vsi', approach_data_slice['vertical_airspeed'].values
+            ).max()
             cond_s = (
                 approach_data_slice['vertical_airspeed'].values
                 >= APPROACH_MIN_VSI
@@ -469,6 +495,10 @@ class FlightAnalyzer(object):
             'F2': unstable_reasons[1],
             'A': unstable_reasons[2],
             'S': unstable_reasons[3],
+            'ias-risk-level': ias_risk_level,
+            'vsi-risk-level': vsi_risk_level,
+            'crosstrack-risk-level': cross_track_risk_level,
+            'heading-risk-level': heading_risk_level,
             'HDG': all_values[0],
             'CTR': all_values[1],
             'IAS': all_values[2],
@@ -618,7 +648,7 @@ class FlightAnalyzer(object):
             #
             # idx_landing_end = last_occurrence_of_min_rpm
 
-        print(landing_result.value)  # TODO: remove after testing
+        logger.debug(landing_result.value)
 
         approach_id = self._approach_id
         self._approaches[approach_id].update({
@@ -626,7 +656,6 @@ class FlightAnalyzer(object):
             'landing-start': idx_landing_start,
             'landing-end': idx_landing_end,
         })
-        print('')  # TODO: remove after testing
 
         return LandingAnalysisResult(
             is_followed_by_takeoff=is_followed_by_takeoff,
@@ -684,17 +713,21 @@ class FlightAnalyzer(object):
                 int(approach['unstable']),
                 np.average(approach['HDG']) if len(approach['HDG']) else None,
                 np.average(approach['F1']) if len(approach['F1']) else None,
+                approach['heading-risk-level'],
                 np.average(approach['CTR']) if len(approach['CTR']) else None,
                 np.average(approach['F2']) if len(approach['F2']) else None,
+                approach['crosstrack-risk-level'],
                 np.average(approach['IAS']) if len(approach['IAS']) else None,
                 np.average(approach['A']) if len(approach['A']) else None,
+                approach['ias-risk-level'],
                 np.average(approach['VSI']) if len(approach['VSI']) else None,
                 np.average(approach['S']) if len(approach['S']) else None,
+                approach['vsi-risk-level'],
             )
             for approach_id, approach in self._approaches.items()
         ]
 
-        print('\n'.join(str(tup) for tup in values))
+        logger.debug('\n'.join(str(tup) for tup in values))
 
         if self._skip_output_to_db:
             return
@@ -706,6 +739,10 @@ class FlightAnalyzer(object):
             self._cursor.execute(UPDATE_ANALYSES_SQL, (self._flight_id,))
             self._db.commit()
         except mysql.Error as e:
-            print("MySQL Error [%d]: %s\n" % (e.args[0], e.args[1]))
-            print("Last Executed Query: ", self._cursor._last_executed)
+            logger.exception(
+                'MySQL Error [%d]: %s\nLast Executed Query: %s',
+                e.args[0],
+                e.args[1],
+                self._cursor._last_executed
+            )
             self._db.rollback()

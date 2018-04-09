@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import namedtuple
+from typing import Union
 
 import numpy as np
 
@@ -9,8 +10,17 @@ import numpy as np
 class Range(namedtuple('Range', ['low', 'high'])):
     __slots__ = ()
 
-    def contains(self, value):
-        return self.low <= value <= self.high
+    def contains_inclusive(self, value: Union[int, float]) -> bool:
+        return self.low <= value < self.high
+
+    def contains_exclusive(self, value: Union[int, float]) -> bool:
+        return self.low < value < self.high
+
+    def contains_left_inclusive(self, value: Union[int, float]) -> bool:
+        return self.low <= value < self.high
+
+    def contains_right_inclusive(self, value: Union[int, float]) -> bool:
+        return self.low < value <= self.high
 
 
 metrics = {
@@ -46,20 +56,32 @@ metrics = {
             1: Range(40, 50),
             2: Range(50, np.inf)
         }
+    },
+    'hdg': {
+        'mid': Range(-15, 15),
+        'low': {
+            1: Range(-20, -15),
+            2: Range(-np.inf, -20)
+        },
+        'high': {
+            1: Range(15, 20),
+            2: Range(20, np.inf)
+        }
     }
 }
 
 
-def get_risk_level(param, value):
+def get_risk_level(param: str, value: Union[int, float]) -> int:
     if param not in metrics:
         raise ValueError()
 
     p = metrics[param]
     mid, low, high = p['mid'], p['low'], p['high']
 
-    if low[2].contains(value) or high[2].contains(value):
+    if low[2].contains_left_inclusive(value) or high[2].contains_right_inclusive(value):
         return 2
-    if low[1].contains(value) or high[1].contains(value):
+    if low[1].contains_left_inclusive(value) or high[1].contains_right_inclusive(value):
         return 1
-    if mid.contains(value):
-        return 0
+
+    # It must be in the safe range so we'll return a Risk Level 0
+    return 0

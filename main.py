@@ -3,12 +3,13 @@
 
 from __future__ import print_function
 
-import json
 import argparse
 import contextlib
+import json
 import logging
 import multiprocessing
 import time
+from multiprocessing.pool import Pool
 from typing import Dict
 
 import MySQLdb as mysql
@@ -28,7 +29,8 @@ logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(process)d - %(message)s"
 )
-logger = logging.getLogger(__file__)
+logging.getLogger('flight_analyzer').setLevel(logging.CRITICAL)
+logger = logging.getLogger(__name__)
 
 """ IMPORT ENVIRONMENT-SPECIFIC CONFIGS """
 ENV = "dev"
@@ -64,21 +66,23 @@ fetchFlightDataSQL = """
 """ GLOBAL VARIABLES """
 db = None
 cursor = None
-analyzer = None
-airports = {}
+airports = None
 quad_tree = None
+analyzer = None
 NUM_CPUS = multiprocessing.cpu_count()
 
 vector_create_latlons = np.vectorize(lambda lat, lon: LatLon(lat, lon))
 
 
 def get_aircraft_type(flight_id: int) -> int:
+    global cursor
     cursor.execute(fetchAircraftTypeSQL, (flight_id,))
 
     return cursor.fetchone()['aircraft_type']
 
 
 def get_flight_data(flight_id: int) -> pd.DataFrame:
+    global db
     df = pd.read_sql(fetchFlightDataSQL, con=db, params=[flight_id])
 
     # Create LatLon objects by grabbing the lat,lon columns, transpose so
@@ -90,7 +94,8 @@ def get_flight_data(flight_id: int) -> pd.DataFrame:
     return df
 
 
-def load_airport_data() -> Dict[str, Airport]:
+def load_airport_data() -> Dict[int, Airport]:
+    global cursor
     cursor.execute(fetchAirportDataSQL)
 
     return {
@@ -109,7 +114,7 @@ def load_airport_data() -> Dict[str, Airport]:
 
 
 def load_runway_data_into_airports():
-    global airports
+    global airports, cursor
 
     cursor.execute(fetchRunwayDataSQL)
 
@@ -126,8 +131,53 @@ def load_runway_data_into_airports():
         ))
 
 
-def main(flight_ids, run_multi_process, skip_output):
+def load_quad_tree(airports_dict: Dict[int, Airport]) -> QuadTree:
+    qt = QuadTree()
+    for k, v in airports_dict.items():
+        qt.insert(v)
+
+    return qt
+
+
+def init(airports_dict, qt, skip_output: bool):
     global db, cursor, airports, quad_tree, analyzer
+
+    db = mysql.connect(**db_creds)
+    cursor = db.cursor(mysql.cursors.DictCursor)
+
+    # Load airports into dict
+    # airports = load_airport_data()
+    # load_runway_data_into_airports()
+    airports = airports_dict
+
+    # Load Airports into a QuadTree
+    # quad_tree = load_quad_tree(airports)
+    quad_tree = qt
+
+    analyzer = FlightAnalyzer(db, quad_tree, skip_output)
+
+
+def analyze_flight(flight_id: int):
+    global analyzer, cursor
+    logger.info('Processing Starting for Flight ID [%s]', flight_id)
+    try:
+        aircraft_type_id = get_aircraft_type(flight_id)
+        flight_data = get_flight_data(flight_id)
+
+        takeoffs, approaches = analyzer.analyze(
+            flight_id, aircraft_type_id, flight_data
+        )
+    except mysql.Error as e:
+        logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
+        logger.exception('Last Executed Query: %s', cursor._last_executed)
+    except pd.io.sql.DatabaseError as e:
+        logger.exception('Pandas Error: %s', e)
+
+    logger.info('Processing Complete for Flight ID [%s]', flight_id)
+
+
+def main(flight_ids, run_multi_process, skip_output):
+    global db, cursor, airports, quad_tree, analyzer, NUM_CPUS
 
     # If there are no flight_ids passed as command-line args,
     # fetch all flights that haven't been analyzed for approaches yet
@@ -138,6 +188,7 @@ def main(flight_ids, run_multi_process, skip_output):
         # flight_ids = [flight['flight_id'] for flight in flights]
         flight_ids = (381046, 381218, 381233, 381349, 381812, 382172, 382178, 382486, 382496, 382538, 382741, 382928, 383219, 383403, 383544, 383556, 383749, 383781, 383790, 384269, 384270, 384307, 384326, 384412, 384420, 384441, 384445, 384460, 384476, 384647, 384674, 384965, 385012, 385331, 385645, 385690, 385836, 386486, 386666, 386765, 386800, 387160, 387181, 387201, 387607, 387627, 387765, 387949, 388186, 388192, 388354, 388498, 388638, 388639, 389027, 389165, 389178, 389421, 389521, 389844, 389850, 390048, 390052, 390082, 390131, 390247, 392334, 392504, 392538, 392706, 392824, 392836, 392886, 392898, 392955, 393046, 393230, 393246, 393289, 393554, 393655, 393769, 393837, 394127, 394355, 394362, 394365, 394475, 394645, 394766, 394927, 394933, 394998, 395219, 395220, 395316, 395374, 395599, 397800, 397803)
 
+    NUM_CPUS = min(NUM_CPUS, len(flight_ids))
     logger.info('Number of Flights to Analyze: %4d', len(flight_ids))
 
     with stopwatch('Loading Airport & Runway Data'):
@@ -146,72 +197,79 @@ def main(flight_ids, run_multi_process, skip_output):
 
     with stopwatch('Loading Quad Tree'):
         # Load Airports into a QuadTree
-        quad_tree = QuadTree()
-        for k, v in airports.items():
-            quad_tree.insert(v)
+        quad_tree = load_quad_tree(airports)
 
-    analyzer = FlightAnalyzer(db, quad_tree, skip_output)
+    if run_multi_process:
+        with Pool(
+            processes=NUM_CPUS,
+            initializer=init,
+            initargs=(airports, quad_tree, skip_output)
+        ) as pool:
+            results = pool.map_async(analyze_flight, flight_ids).get()
+    else:
+        analyzer = FlightAnalyzer(db, quad_tree, skip_output)
 
-    values = {
-        'HDG': [],
-        'CTR': [],
-        'IAS': [],
-        'VSI': [],
-    }
+        # init(skip_output)
 
-    t_values = {
-        'speed-diffs': [],
-        'agl': [],
-    }
+        values = {
+            'HDG': [],
+            'CTR': [],
+            'IAS': [],
+            'VSI': [],
+        }
 
-    turn_values = {
-        'turn-cross-track-error': [],
-    }
+        t_values = {
+            'speed-diffs': [],
+            'agl': [],
+        }
 
-    for flight_id in flight_ids:
-        logger.info('Processing Starting for Flight ID [%s]', flight_id)
-        try:
-            aircraft_type_id = get_aircraft_type(flight_id)
-            flight_data = get_flight_data(flight_id)
+        turn_values = {
+            'turn-cross-track-error': [],
+        }
 
-            takeoffs, approaches = analyzer.analyze(
-                flight_id, aircraft_type_id, flight_data
-            )
+        for flight_id in flight_ids:
+            logger.info('Processing Starting for Flight ID [%s]', flight_id)
+            try:
+                aircraft_type_id = get_aircraft_type(flight_id)
+                flight_data = get_flight_data(flight_id)
 
-            for i, a in approaches.items():
-                if a['landing-type'] != 'go-around':
-                    for param in values.keys():
-                        if param == 'CTR' and (np.abs(a[param]) > 100).any():
-                            with open('out.txt', 'a') as o:
-                                o.write('(%s, %s) => (%s, %s) => (%f, %f) => (%s, %s)\n' % (flight_id, i, a['airport-id'], a['runway-id'], np.abs(a[param]).max(), np.average(a[param]), a['approach-start'], a['approach-end']))
+                takeoffs, approaches = analyzer.analyze(
+                    flight_id, aircraft_type_id, flight_data
+                )
 
-                        values[param].extend(a[param])
+                for i, a in approaches.items():
+                    if a['landing-type'] != 'go-around':
+                        for param in values.keys():
+                            if param == 'CTR' and (np.abs(a[param]) > 100).any():
+                                with open('out.txt', 'a') as o:
+                                    o.write('(%s, %s) => (%s, %s) => (%f, %f) => (%s, %s)\n' % (flight_id, i, a['airport-id'], a['runway-id'], np.abs(a[param]).max(), np.average(a[param]), a['approach-start'], a['approach-end']))
 
-            for i, t in takeoffs.items():
-                for param in t_values.keys():
-                    t_values[param].extend(t[param])
+                            values[param].extend(a[param])
 
-            for i, a in approaches.items():
-                for param in turn_values.keys():
-                    if a[param] is not None:
-                        turn_values[param].append(a[param])
+                for i, t in takeoffs.items():
+                    for param in t_values.keys():
+                        t_values[param].extend(t[param])
 
-        except mysql.Error as e:
-            logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
-            logger.exception('Last Executed Query: %s', cursor._last_executed)
-        except pd.io.sql.DatabaseError as e:
-            logger.exception('Pandas Error: %s', e)
+                for i, a in approaches.items():
+                    for param in turn_values.keys():
+                        if a[param] is not None:
+                            turn_values[param].append(a[param])
+            except mysql.Error as e:
+                logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
+                logger.exception('Last Executed Query: %s', cursor._last_executed)
+            except pd.io.sql.DatabaseError as e:
+                logger.exception('Pandas Error: %s', e)
 
-        logger.info('Processing Complete for Flight ID [%s]', flight_id)
+            logger.info('Processing Complete for Flight ID [%s]', flight_id)
 
-    with open('params.txt', 'w') as handle:
-        json.dump(values, handle)
+        with open('params.txt', 'w') as handle:
+            json.dump(values, handle)
 
-    with open('t_params.txt', 'w') as handle:
-        json.dump(t_values, handle)
+        with open('t_params.txt', 'w') as handle:
+            json.dump(t_values, handle)
 
-    with open('turn_params.txt', 'w') as handle:
-        json.dump(turn_values, handle)
+        with open('turn_params.txt', 'w') as handle:
+            json.dump(turn_values, handle)
 
 
 @contextlib.contextmanager
