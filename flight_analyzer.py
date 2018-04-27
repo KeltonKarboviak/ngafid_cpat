@@ -399,7 +399,7 @@ class FlightAnalyzer(object):
         })
 
         approach_data_slice = self._flight_data.iloc[
-            idx_approach_start: idx_approach_end + 1
+            idx_approach_start : idx_approach_end+1
         ]
 
         # Perform parameter analyses
