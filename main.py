@@ -9,7 +9,7 @@ import time
 from multiprocessing.pool import Pool
 from typing import Dict
 
-import MySQLdb as mysql
+import MySQLdb
 import numpy as np
 import pandas as pd
 
@@ -135,8 +135,8 @@ def load_quad_tree(airports_dict: Dict[int, Airport]) -> QuadTree:
 def init(airports_dict, qt, skip_output: bool):
     global db, cursor, airports, quad_tree, analyzer
 
-    db = mysql.connect(**db_creds)
-    cursor = db.cursor(mysql.cursors.DictCursor)
+    db = MySQLdb.connect(**db_creds)
+    cursor = db.cursor(MySQLdb.cursors.DictCursor)
 
     # Load airports into dict
     airports = airports_dict
@@ -157,7 +157,7 @@ def analyze_flight(flight_id: int):
         takeoffs, approaches = analyzer.analyze(
             flight_id, aircraft_type_id, flight_data
         )
-    except mysql.Error as e:
+    except MySQLdb.Error as e:
         logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
         logger.exception('Last Executed Query: %s', cursor._last_executed)
     except pd.io.sql.DatabaseError as e:
@@ -208,7 +208,7 @@ def main(flight_ids, run_multi_process, skip_output):
                 takeoffs, approaches = analyzer.analyze(
                     flight_id, aircraft_type_id, flight_data
                 )
-            except mysql.Error as e:
+            except MySQLdb.Error as e:
                 logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
                 logger.exception('Last Executed Query: %s', cursor._last_executed)
             except pd.io.sql.DatabaseError as e:
@@ -254,12 +254,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     try:
-        db = mysql.connect(**db_creds)
-        cursor = db.cursor(mysql.cursors.DictCursor)
+        db = MySQLdb.connect(**db_creds)
+        cursor = db.cursor(MySQLdb.cursors.DictCursor)
 
         with stopwatch('Program Execution'):
             main(args.flight_ids, args.multi_process, args.no_write)
-    except mysql.Error as e:
+    except MySQLdb.Error as e:
         logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
     finally:
         if cursor is not None:

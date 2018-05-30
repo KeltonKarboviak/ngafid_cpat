@@ -8,7 +8,7 @@ from enum import Enum
 from math import atan, degrees
 from typing import Dict, Tuple
 
-import MySQLdb as mysql
+import MySQLdb
 import numpy as np
 import pandas as pd
 from numpy import absolute
@@ -113,12 +113,12 @@ class FlightAnalyzer(object):
 
     def __init__(
         self,
-        db: mysql.Connection,
+        db: MySQLdb.Connection,
         quad_tree: QuadTree,
         skip_output: bool = False
     ):
         self._db = db
-        self._cursor = db.cursor(mysql.cursors.DictCursor)
+        self._cursor = db.cursor(MySQLdb.cursors.DictCursor)
         self._quad_tree = quad_tree
         self._skip_output_to_db = skip_output
 
@@ -793,12 +793,12 @@ class FlightAnalyzer(object):
             return
 
         try:
+            # Check to see if flight has any approaches to insert
             if len(values):
-                # Check to see if flight has any approaches to insert
                 self._cursor.executemany(INSERT_SQL, values)
             self._cursor.execute(UPDATE_ANALYSES_SQL, (self._flight_id,))
             self._db.commit()
-        except mysql.Error as e:
+        except MySQLdb.Error as e:
             logger.exception(
                 'MySQL Error [%d]: %s\nLast Executed Query: %s',
                 e.args[0],
