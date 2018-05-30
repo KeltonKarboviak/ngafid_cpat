@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 import logging
 from collections import namedtuple
 from enum import Enum
