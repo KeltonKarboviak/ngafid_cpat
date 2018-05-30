@@ -6,7 +6,7 @@ import logging
 from collections import namedtuple
 from enum import Enum
 from math import atan, degrees
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 
 import MySQLdb
 import numpy as np
@@ -21,7 +21,7 @@ from geoutils import (
     vincenty_distance,
 )
 from latlon import LatLon
-from metrics import get_risk_level
+from metrics import PENALTY_PER_DEDUCTION, get_risk_level
 from quad_tree import QuadTree
 from runway import Runway
 
@@ -72,6 +72,7 @@ INSERT_KEYS_LIST = [
     'all_crosstrack', 'f2_crosstrack', 'crosstrack_risk_level',
     'all_ias', 'a_ias', 'ias_risk_level',
     'all_vsi', 's_vsi', 'vsi_risk_level',
+    'score',
 ]
 INSERT_KEYS_SQL = ', '.join(INSERT_KEYS_LIST)
 INSERT_UPDATE_VALUES_SQL = ', '.join(
@@ -251,6 +252,11 @@ class FlightAnalyzer(object):
                     landing_results.is_followed_by_takeoff,
                     landing_results.idx_landing_end
                 )
+
+                self._approaches[self._approach_id].update({
+                    'score': self._calculate_approach_score(),
+                })
+
                 self._approach_id += 1
         except (KeyError, IndexError):
             # We went out of bounds on an index in self._flight_data, which
@@ -761,6 +767,23 @@ class FlightAnalyzer(object):
 
         return our_runway
 
+    def _calculate_approach_score(self) -> Union[int, float]:
+        approach = self._approaches[self._approach_id]
+        risk_level_keys = filter(
+            lambda k: k.endswith('risk-level'), approach.keys()
+        )
+
+        # Total up all deductions based on risk level
+        deductions = sum(approach[k] for k in risk_level_keys if approach[k])
+
+        if approach['unstable'] and approach['landing_type'] != 'go-around':
+            logger.debug('Unstable & DID NOT go-around')
+            deductions += 1
+
+        score = 100 - (PENALTY_PER_DEDUCTION * deductions)
+
+        return score
+
     def _output_to_db(self):
         values = [
             (
@@ -792,6 +815,7 @@ class FlightAnalyzer(object):
                 np.average(approach['VSI']) if len(approach['VSI']) else None,
                 np.average(approach['S']) if len(approach['S']) else None,
                 approach['vsi-risk-level'],
+                approach['score'],
             )
             for approach_id, approach in self._approaches.items()
         ]

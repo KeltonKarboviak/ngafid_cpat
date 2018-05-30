@@ -1,10 +1,12 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from collections import namedtuple
 from typing import Union
 
 import numpy as np
+
+
+PENALTY_PER_DEDUCTION = 4
 
 
 class Range(namedtuple('Range', ['low', 'high'])):
@@ -78,10 +80,10 @@ def get_risk_level(param: str, value: Union[int, float]) -> int:
     p = metrics[param]
     mid, low, high = p['mid'], p['low'], p['high']
 
-    if low[2].contains_left_inclusive(value) or high[2].contains_right_inclusive(value):
-        return 2
-    if low[1].contains_left_inclusive(value) or high[1].contains_right_inclusive(value):
-        return 1
+    for level in [2, 1]:
+        if (low[level].contains_left_inclusive(value)
+            or high[level].contains_right_inclusive(value)):
+            return level
 
     # It must be in the safe range so we'll return a Risk Level 0
     return 0
