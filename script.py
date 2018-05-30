@@ -3,11 +3,7 @@
 
 import MySQLdb as mysql
 
-from config import db_credentials
-
-'''IMPORT ENVIRONMENT-SPECIFIC CONFIGS'''
-ENV = "dev"
-db_creds = db_credentials[ENV]
+from config import db_credentials as db_creds
 
 '''GLOBAL VARIABLES'''
 db = None
@@ -60,10 +56,7 @@ def main():
         )
 
         # Total up all deductions based on risk level
-        deductions = 0
-        for k in risk_level_keys:
-            if result[k]:
-                deductions += result[k]
+        deductions = sum(result[k] for k in risk_level_keys if result[k])
 
         if result['unstable'] and result['landing_type'] != 'go-around':
             print('\t', 'Unstable & DID NOT go-around')
