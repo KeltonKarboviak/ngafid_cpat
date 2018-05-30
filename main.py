@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-
 import argparse
 import contextlib
-import json
 import logging
 import multiprocessing
 import time
@@ -17,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from airport import Airport
-from config import db_credentials
+from config import db_credentials as db_creds
 from flight_analyzer import FlightAnalyzer
 from latlon import LatLon
 from quad_tree import QuadTree
@@ -31,10 +28,6 @@ logging.basicConfig(
 )
 logging.getLogger('flight_analyzer').setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
-
-""" IMPORT ENVIRONMENT-SPECIFIC CONFIGS """
-ENV = "dev"
-db_creds = db_credentials[ENV]
 
 """ SQL STATEMENTS """
 fetchAirportDataSQL = """\
@@ -206,24 +199,6 @@ def main(flight_ids, run_multi_process, skip_output):
     else:
         analyzer = FlightAnalyzer(db, quad_tree, skip_output)
 
-        # init(skip_output)
-
-        values = {
-            'HDG': [],
-            'CTR': [],
-            'IAS': [],
-            'VSI': [],
-        }
-
-        t_values = {
-            'speed-diffs': [],
-            'agl': [],
-        }
-
-        turn_values = {
-            'turn-cross-track-error': [],
-        }
-
         for flight_id in flight_ids:
             logger.info('Processing Starting for Flight ID [%s]', flight_id)
             try:
@@ -233,24 +208,6 @@ def main(flight_ids, run_multi_process, skip_output):
                 takeoffs, approaches = analyzer.analyze(
                     flight_id, aircraft_type_id, flight_data
                 )
-
-                for i, a in approaches.items():
-                    if a['landing-type'] != 'go-around':
-                        for param in values.keys():
-                            if param == 'CTR' and (np.abs(a[param]) > 100).any():
-                                with open('out.txt', 'a') as o:
-                                    o.write('(%s, %s) => (%s, %s) => (%f, %f) => (%s, %s)\n' % (flight_id, i, a['airport-id'], a['runway-id'], np.abs(a[param]).max(), np.average(a[param]), a['approach-start'], a['approach-end']))
-
-                            values[param].extend(a[param])
-
-                for i, t in takeoffs.items():
-                    for param in t_values.keys():
-                        t_values[param].extend(t[param])
-
-                for i, a in approaches.items():
-                    for param in turn_values.keys():
-                        if a[param] is not None:
-                            turn_values[param].append(a[param])
             except mysql.Error as e:
                 logger.exception('MySQL Error [%d]: %s', e.args[0], e.args[1])
                 logger.exception('Last Executed Query: %s', cursor._last_executed)
@@ -258,15 +215,6 @@ def main(flight_ids, run_multi_process, skip_output):
                 logger.exception('Pandas Error: %s', e)
 
             logger.info('Processing Complete for Flight ID [%s]', flight_id)
-
-        with open('params.txt', 'w') as handle:
-            json.dump(values, handle)
-
-        with open('t_params.txt', 'w') as handle:
-            json.dump(t_values, handle)
-
-        with open('turn_params.txt', 'w') as handle:
-            json.dump(turn_values, handle)
 
 
 @contextlib.contextmanager
@@ -277,8 +225,8 @@ def stopwatch(msg):
         yield
     finally:
         t1 = time.time()
-    print("Total elapsed time for %s: %.3f seconds" % (msg, t1 - t0))
-    # logger.info("Total elapsed time for %s: %.3f seconds", msg, t1 - t0)
+
+    logger.info('Total elapsed time for %s: %.3f seconds', msg, t1 - t0)
 
 
 if __name__ == '__main__':
