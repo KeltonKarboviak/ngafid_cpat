@@ -134,7 +134,6 @@ class FlightAnalyzer(object):
         self.vector_cross_track_distance = np.vectorize(
             self._cross_track_to_center_line
         )
-        self.vector_get_risk_level = np.vectorize(get_risk_level)
 
     def analyze(
         self,
