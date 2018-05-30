@@ -93,7 +93,7 @@ LandingResult = Enum('LandingResult', {
 })
 
 LandingAnalysisResult = namedtuple(
-    'LandingAnalysisResult', 'is_followed_by_takeoff idx_landing_end'
+    'LandingAnalysisResult', ('is_followed_by_takeoff', 'idx_landing_end')
 )
 
 
@@ -191,6 +191,13 @@ class FlightAnalyzer(object):
         return df
 
     def _set_thresholds(self, aircraft_type_id: int):
+        global APPROACH_MIN_IAS, APPROACH_MAX_IAS, APPROACH_MAX_HEADING_ERROR, \
+            APPROACH_MIN_VSI, APPROACH_MAX_CROSSTRACK_ERROR, \
+            APPROACH_MIN_DISTANCE, APPROACH_MIN_ALTITUDE_AGL, \
+            APPROACH_FINAL_MAX_ALTITUDE_AGL, APPROACH_FINAL_MIN_ALTITUDE_AGL, \
+            FULL_STOP_SPEED_INDICATOR, TOUCH_AND_GO_ELEVATION_INDICATOR, \
+            RUNWAY_SELECTION_INDICATOR
+
         self._cursor.execute(SELECT_THRESHOLDS_SQL, (aircraft_type_id,))
         row = self._cursor.fetchone()
 
@@ -249,7 +256,7 @@ class FlightAnalyzer(object):
             # We went out of bounds on an index in self._flight_data, which
             # means we've gone through all the data. Thus, return out of
             # function.
-            print('Hit the except block!!!')  # TODO: remove after testing
+            pass
 
     def _analyze_takeoff(self, idx_takeoff_start: int) -> int:
         """
@@ -533,7 +540,9 @@ class FlightAnalyzer(object):
         # Get last 3 minutes (180 seconds) of data before 'idx_approach_end'
         heading_series = self._flight_data.iloc[idx_approach_end-180 : idx_approach_end]['heading']
         heading_errors = pd.Series(
-            unsigned_heading_difference(runway.magHeading, heading_series.values),
+            unsigned_heading_difference(
+                runway.magHeading, heading_series.values
+            ),
             index=heading_series.index
         )
 
