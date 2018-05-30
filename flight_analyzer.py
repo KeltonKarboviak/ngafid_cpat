@@ -5,12 +5,14 @@ from __future__ import print_function
 import logging
 from collections import namedtuple
 from enum import Enum
+from math import atan, degrees
 from typing import Dict, Tuple
 
 import MySQLdb as mysql
 import numpy as np
 import pandas as pd
 from numpy import absolute
+from scipy.stats import linregress
 
 from airport import Airport
 from geoutils import (
@@ -65,6 +67,7 @@ INSERT_KEYS_LIST = [
     'turn_start', 'turn_end', 'turn_error_type', 'turn_risk_level',
     'approach_start', 'approach_end', 'landing_start', 'landing_end',
     'landing_type', 'unstable',
+    'actual_gpa', 'gpa_r_squared',
     'all_heading', 'f1_heading', 'heading_risk_level',
     'all_crosstrack', 'f2_crosstrack', 'crosstrack_risk_level',
     'all_ias', 'a_ias', 'ias_risk_level',
@@ -145,9 +148,7 @@ class FlightAnalyzer(object):
         self._data_length = len(data.index)
 
         if not skip_analysis and self._data_length > 0:
-            # self._set_thresholds(aircraft_type_id)
-            # start = self._find_initial_takeoff()
-            # self._analyze_approach(start)
+            self._set_thresholds(aircraft_type_id)
             self._analyze()
 
         # if not self.skipOutputToDB:
@@ -402,6 +403,9 @@ class FlightAnalyzer(object):
             idx_approach_start : idx_approach_end+1
         ]
 
+        # Perform self-defined glide path analysis
+        self._analyze_glide_path(idx_approach_start, idx_approach_end)
+
         # Perform parameter analyses
         all_values = [[], [], [], []]
         unstable_reasons = [[], [], [], []]
@@ -592,6 +596,46 @@ class FlightAnalyzer(object):
 
         return risk_level, turn_error, cross_track_error
 
+    def _analyze_glide_path(
+        self,
+        idx_approach_start: int,
+        idx_approach_end: int
+    ):
+        approach_data_slice = self._flight_data.iloc[
+            idx_approach_start : idx_approach_end+1
+        ]
+
+        regress_time = np.arange(0, len(approach_data_slice.index))
+        regress_hat = approach_data_slice['radio_altitude_derived'].values
+        distance_approach = approach_data_slice['distance'].values
+
+        regression_result = linregress(regress_time, regress_hat)
+        y_intercept, slope = (
+            regression_result.intercept, regression_result.slope
+        )
+
+        max_distance = np.max(distance_approach)
+        min_distance = np.min(distance_approach)
+        distance_traveled = max_distance - min_distance
+
+        max_time = np.max(regress_time)
+        min_time = np.min(regress_time)
+
+        predicted_max_hat = (slope * max_time) + y_intercept
+        predicted_min_hat = (slope * min_time) + y_intercept
+
+        distance_dropped = predicted_max_hat - predicted_min_hat
+
+        actual_gpa = degrees(atan(distance_dropped / distance_traveled))
+
+        pearsons_r = regression_result.rvalue
+        r_squared = pearsons_r * pearsons_r
+
+        self._approaches[self._approach_id].update({
+            'actual-gpa': actual_gpa,
+            'gpa-r-squared': r_squared,
+        })
+
     def _analyze_landing(self, idx_landing_start: int) -> LandingAnalysisResult:
         if idx_landing_start == self._flight_data.index[-1]:
             # If we are given the last index of data as the landing start,
@@ -725,6 +769,8 @@ class FlightAnalyzer(object):
                 approach['landing-end'],
                 approach['landing-type'],
                 int(approach['unstable']),
+                approach['actual-gpa'],
+                approach['gpa-r-squared'],
                 np.average(approach['HDG']) if len(approach['HDG']) else None,
                 np.average(approach['F1']) if len(approach['F1']) else None,
                 approach['heading-risk-level'],
